@@ -1,0 +1,6 @@
+{
+  "name": "مدرسة سانت بولس للكتاب المقدس",
+  "description": "المنصة التعليمية الشاملة لمدرسة سانت بولس للكتاب المقدس - كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
