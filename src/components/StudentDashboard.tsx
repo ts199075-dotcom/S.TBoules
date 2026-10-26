@@ -50,8 +50,9 @@ export const StudentDashboard: React.FC = () => {
           <Lock className="w-8 h-8" />
         </div>
         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
-          برجاء تسجيل الدخول أو اختيار حساب طالب
+          برجاء تسجيل الدخول بحساب مخدوم لعرض الدرجات
         </h2>
+        <p className="text-sm text-stone-500">بعد اعتماد أمين الخدمة ستظهر درجاتك ولقاءات فصلك هنا.</p>
       </div>
     );
   }
@@ -90,13 +91,6 @@ export const StudentDashboard: React.FC = () => {
         </div>
 
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={() => approveUser(currentUser.id)}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>⚡ تجربة فورية: اعتماد وقبول حسابي الآن كمسؤول</span>
-          </button>
           <button
             onClick={logout}
             className="px-4 py-2.5 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"

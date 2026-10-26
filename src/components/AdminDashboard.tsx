@@ -39,7 +39,7 @@ import {
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
 
-type AdminTab = 'classes' | 'scores' | 'pending' | 'post_approvals' | 'servants' | 'assistants' | 'reports' | 'events';
+export type AdminTab = 'classes' | 'scores' | 'pending' | 'post_approvals' | 'servants' | 'assistants' | 'reports' | 'events';
 
 interface AdminDashboardProps {
   initialTab?: AdminTab;

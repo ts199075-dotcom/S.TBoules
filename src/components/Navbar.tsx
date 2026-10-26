@@ -13,11 +13,12 @@ import {
   Sun,
   Moon,
   Menu,
-  X,
   Home,
 } from 'lucide-react';
 import { ClassId } from '../types';
 import { MasterMenuDrawer } from './MasterMenuDrawer';
+import { BrandMark } from './ui/BrandMark';
+import { CHURCH_NAME, SCHOOL_NAME } from '../lib/constants';
 
 interface NavbarProps {
   currentTab: string;
@@ -44,12 +45,19 @@ export const Navbar: React.FC<NavbarProps> = ({
     theme,
     toggleTheme,
     lessonPosts,
+    backendStatus,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [masterMenuOpen, setMasterMenuOpen] = useState(false);
+const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navBtn = (active: boolean, extra = '') =>
+    `px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+      active
+        ? extra || 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-xs'
+        : 'text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white'
+    }`;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const pendingRequestsCount = users.filter((u) => u.status === 'pending').length;
@@ -58,26 +66,39 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isAdmin = currentUser?.role === 'admin';
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 transition-colors">
+    <header className="sticky top-0 z-50 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800">
       {/* Top micro bar for Church Affiliation & Logged in user info */}
       <div className="bg-stone-900 text-stone-300 text-xs py-1.5 px-3 sm:px-6 border-b border-stone-800">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-1.5 text-[11px] sm:text-xs">
           <div className="flex items-center gap-1.5 truncate">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-            <span className="font-medium text-stone-200 truncate">
-              كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي
-            </span>
+            <span className="font-medium text-stone-200 truncate">{CHURCH_NAME}</span>
             <span className="hidden md:inline text-stone-600">|</span>
-            <span className="hidden md:inline text-stone-400">
-              مدرسة سانت بولس للكتاب المقدس
-            </span>
+            <span className="hidden md:inline text-stone-400">{SCHOOL_NAME}</span>
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-stone-400">
+            <span
+              className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
+                backendStatus === 'online'
+                  ? 'border-emerald-700/60 text-emerald-300'
+                  : backendStatus === 'connecting'
+                    ? 'border-amber-700/60 text-amber-300'
+                    : 'border-stone-600 text-stone-400'
+              }`}
+              title={backendStatus === 'online' ? 'الخادم متصل' : 'وضع محلي'}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  backendStatus === 'online' ? 'bg-emerald-400' : backendStatus === 'connecting' ? 'bg-amber-400' : 'bg-stone-500'
+                }`}
+              />
+              {backendStatus === 'online' ? 'الخادم متصل' : backendStatus === 'connecting' ? 'جارٍ الاتصال' : 'وضع محلي'}
+            </span>
             {currentUser ? (
               <div className="flex items-center gap-1">
                 <span className="text-amber-400 font-medium">
-                  {isAdmin ? '👑 مسؤول النظام:' : '👤 الحساب:'}
+                  {isAdmin ? 'مسؤول النظام:' : 'الحساب:'}
                 </span>
                 <span className="text-stone-200 font-semibold truncate max-w-[150px] sm:max-w-none">
                   {currentUser.email || currentUser.name}
@@ -93,44 +114,45 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Main Navbar */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-3">
         {/* Brand / Logo with St. Paul Avatar */}
-        <div
-          onClick={() => {
-            setCurrentTab('home');
-            setMobileMenuOpen(false);
-          }}
-          className="flex items-center gap-2.5 cursor-pointer group shrink-0"
+        <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          className="md:hidden p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+          aria-label="قائمة التنقل"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((open) => !open)}
         >
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-600/50 shadow-xs group-hover:scale-105 transition-transform bg-stone-100 dark:bg-stone-800 flex items-center justify-center shrink-0">
-            <img
-              src="/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg"
-              alt="القديس بولس الرسول"
-              className="w-full h-full object-cover"
-            />
-          </div>
+          <Menu className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setCurrentTab('home')}
+          className="flex items-center gap-2.5 group shrink-0 text-right min-w-0"
+        >
+          <BrandMark className="group-hover:scale-105 transition-transform" />
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100 tracking-tight group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
+              <span className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100 tracking-tight group-hover:text-amber-700 dark:group-hover:text-amber-400">
                 مدرسة سانت بولس
               </span>
-              <span className="hidden lg:inline-block text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium px-2 py-0.2 rounded border border-stone-200 dark:border-stone-700">
+              <span className="hidden lg:inline-block text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium px-2 py-0.5 rounded border border-stone-200 dark:border-stone-700">
                 الكتاب المقدس
               </span>
             </div>
             <p className="text-[11px] text-stone-500 dark:text-stone-400 hidden sm:block truncate">
-              كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي
+              {CHURCH_NAME}
             </p>
           </div>
+        </button>
         </div>
 
         {/* Desktop Navigation Tabs */}
         <nav className="hidden md:flex items-center gap-1 bg-stone-100 dark:bg-stone-800/80 p-1 rounded-xl border border-stone-200 dark:border-stone-700">
           <button
+            type="button"
             onClick={() => setCurrentTab('home')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              currentTab === 'home'
-                ? 'bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-xs'
-                : 'text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white'
-            }`}
+            aria-current={currentTab === 'home' ? 'page' : undefined}
+            className={navBtn(currentTab === 'home')}
           >
             الرئيسية
           </button>
@@ -187,11 +209,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* User Actions & Controls */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Dark Mode Toggle */}
-          <button
+            <button
+              type="button"
             onClick={toggleTheme}
-            className="p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+            className="p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
             title={theme === 'dark' ? 'التحويل للوضع المضيء' : 'التحويل للوضع الليلي'}
-            aria-label="تبديل الوضع الليلي والنهاري"
+            aria-label={theme === 'dark' ? 'التحويل للوضع المضيء' : 'التحويل للوضع الليلي'}
           >
             {theme === 'dark' ? (
               <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
@@ -207,8 +230,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setShowNotifications(!showNotifications);
                 setShowUserMenu(false);
               }}
-              className="relative p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+              className="relative p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
               title="الإشعارات والتحديثات"
+              aria-label="الإشعارات"
+              aria-expanded={showNotifications}
             >
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
               {unreadCount > 0 && (
@@ -301,7 +326,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {currentUser.name.split(' ')[0]}
                     </div>
                     <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
-                      {isAdmin ? '👑 مسؤول النظام' : currentUser.role === 'servant' ? '✝️ خادم' : '📖 مخدوم'}
+                      {isAdmin ? 'مسؤول النظام' : currentUser.role === 'servant' ? 'خادم' : 'مخدوم'}
                     </div>
                   </div>
                   <ChevronDown className="w-3 h-3 text-stone-400" />
@@ -425,7 +450,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-label="القائمة الشاملة"
           >
             <Menu className="w-4 h-4 text-amber-700 dark:text-amber-400" />
-            <span className="hidden sm:inline">القائمة الشاملة ☰</span>
+            <span className="hidden sm:inline">القائمة</span>
           </button>
         </div>
       </div>

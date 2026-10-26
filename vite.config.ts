@@ -1,21 +1,43 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig, type Connect } from 'vite';
+import { createApiApp } from './server/app';
+
+function apiMiddleware(): Connect.NextHandleFunction {
+  const api = createApiApp();
+  return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
+    if (req.url?.startsWith('/api')) {
+      api(req as never, res as never, next);
+      return;
+    }
+    next();
+  };
+}
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'st-paul-api',
+        configureServer(server) {
+          server.middlewares.use(apiMiddleware());
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use(apiMiddleware());
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

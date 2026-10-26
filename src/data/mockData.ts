@@ -59,9 +59,6 @@ export const CLASSES_LIST: ClassInfo[] = [
   },
 ];
 
-// Single Admin Account configured as requested:
-// Email: ts199075@gmail.com
-// Password: 987321987
 export const INITIAL_USERS: UserProfile[] = [
   {
     id: 'admin-ts',
@@ -168,3 +165,23 @@ export const INITIAL_SERVANT_SUBMISSIONS: ServantAttendanceSubmission[] = [];
 export const INITIAL_LESSON_POSTS: ServantLessonPost[] = [];
 
 export const INITIAL_NOTIFICATIONS: AppNotification[] = [];
+
+export const SAMPLE_USERS: UserProfile[] = [
+  { id: 'stud-p4-1', name: 'مارك مينا إبراهيم', role: 'student', classId: 'primary_4', age: 9, status: 'active', phone: '01011112222', registeredAt: '2026-10-10' },
+  { id: 'stud-p4-2', name: 'مارينا يوسف سمير', role: 'student', classId: 'primary_4', age: 10, status: 'active', phone: '01011112223', registeredAt: '2026-10-11' },
+  { id: 'stud-p5-1', name: 'بيتر هاني سامي', role: 'student', classId: 'primary_5', age: 11, status: 'active', phone: '01022223331', registeredAt: '2026-10-10' },
+  { id: 'stud-p5-2', name: 'سارة إيهاب كامل', role: 'student', classId: 'primary_5', age: 11, status: 'active', phone: '01022223332', registeredAt: '2026-10-12' },
+  { id: 'stud-p6-1', name: 'ديفيد رفيق عادل', role: 'student', classId: 'primary_6', age: 12, status: 'active', phone: '01033334441', registeredAt: '2026-10-10' },
+  { id: 'stud-p6-2', name: 'كاترين عماد فوزي', role: 'student', classId: 'primary_6', age: 12, status: 'active', phone: '01033334442', registeredAt: '2026-10-13' },
+  { id: 'stud-pr1-1', name: 'كيرلس مجدي ناصف', role: 'student', classId: 'prep_1', age: 13, status: 'active', phone: '01044445551', registeredAt: '2026-10-10' },
+  { id: 'stud-pr1-2', name: 'فيرونيكا ماجد فخري', role: 'student', classId: 'prep_1', age: 13, status: 'active', phone: '01044445552', registeredAt: '2026-10-14' },
+  { id: 'stud-pr2-1', name: 'أبانوب فادي نصحي', role: 'student', classId: 'prep_2_3', age: 14, status: 'active', phone: '01055556661', registeredAt: '2026-10-10' },
+  { id: 'stud-pr2-2', name: 'مريم صبحي غالي', role: 'student', classId: 'prep_2_3', age: 15, status: 'active', phone: '01055556662', registeredAt: '2026-10-15' },
+  { id: 'stud-sec-1', name: 'توماس رمزي لطيف', role: 'student', classId: 'secondary', age: 16, status: 'active', phone: '01066667771', registeredAt: '2026-10-10' },
+  { id: 'stud-sec-2', name: 'مونيكا رفعت عزيز', role: 'student', classId: 'secondary', age: 17, status: 'active', phone: '01066667772', registeredAt: '2026-10-16' },
+  { id: 'stud-ad-1', name: 'فادي نسيم وهبة', role: 'student', classId: 'adults', age: 22, status: 'active', phone: '01077778881', registeredAt: '2026-10-10' },
+  { id: 'stud-ad-2', name: 'كرستين جورج لمعي', role: 'student', classId: 'adults', age: 24, status: 'active', phone: '01077778882', registeredAt: '2026-10-17' },
+  { id: 'serv-1', name: 'الخادم مينا عاطف', role: 'servant', classId: 'prep_2_3', age: 30, status: 'active', phone: '01099990001', registeredAt: '2026-09-15' },
+  { id: 'serv-2', name: 'الخادمة ليديا عادل', role: 'servant', classId: 'primary_4', age: 28, status: 'active', phone: '01099990002', registeredAt: '2026-09-15' },
+  { id: 'stud-pending-1', name: 'يوحنا سامح عازر', role: 'student', classId: 'prep_2_3', age: 14, status: 'pending', phone: '01088889991', registeredAt: '2026-10-25' },
+];

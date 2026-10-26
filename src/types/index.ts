@@ -132,4 +132,6 @@ export interface AppNotification {
   type: 'prep_upload' | 'absence' | 'new_student' | 'grade_updated' | 'role_assigned' | 'qr_attendance' | 'post_pending' | 'post_approved';
   read: boolean;
   actionUrl?: string;
+  audienceUserId?: string;
+  audienceRoles?: UserRole[];
 }
