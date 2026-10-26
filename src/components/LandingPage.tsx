@@ -2,24 +2,14 @@ import React from 'react';
 import { useApp } from '../context/AppContext';
 import {
   BookOpen,
-  Award,
   Sparkles,
-  Users,
-  Shield,
-  Calendar,
-  Heart,
-  Flame,
-  FileCheck,
-  CheckCircle2,
   ChevronLeft,
   ArrowRight,
   Scroll,
   Church,
-  GraduationCap,
-  Star,
-  Check,
-  QrCode,
-  Lock,
+  Shield,
+  Heart,
+  Compass,
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -33,17 +23,43 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const { classes, currentUser } = useApp();
 
-  return (
-    <div className="space-y-16 pb-20">
-      {/* Hero Section with Saint Paul Theme */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-slate-900 via-amber-950 to-slate-900 text-white pt-16 pb-24 px-4 sm:px-6 rounded-b-[2.5rem] shadow-xl">
-        {/* Subtle decorative background pattern */}
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#d97706_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none" />
+  // The 5 biblical study axes requested by the user
+  const studyPillars = [
+    {
+      title: 'البعد المسياني',
+      subtitle: 'رؤية شخص ربنا يسوع المسيح ورموزه ونبواته في كل أسفار الكتاب المقدس',
+      icon: '✝️',
+    },
+    {
+      title: 'الطقس',
+      subtitle: 'فهم طقوس الكنيسة والصلوات الليتورجية والارتباط الحي بالنص الكتابي',
+      icon: '🕯️',
+    },
+    {
+      title: 'العقيدة',
+      subtitle: 'الإيمان الأرثوذكسي المسلّم مرة للقديسين والعمق اللاهوتي الآبائي المستقيم',
+      icon: '📜',
+    },
+    {
+      title: 'معاملات الله مع البشر',
+      subtitle: 'اكتشاف أمانة الله، صلاحه، مراحمه، وتدبيره الأبوي للإنسان عبر الأجيال',
+      icon: '🕊️',
+    },
+    {
+      title: 'الخطية ونتائجها',
+      subtitle: 'الفهم الروحي الواعي لضعف الطبيعة وسقوط الإنسان وقوة التوبة والنعمة المخلّصة',
+      icon: '🌿',
+    },
+  ];
 
-        <div className="max-w-6xl mx-auto relative z-10 text-center space-y-6">
-          {/* Saint Paul Icon Avatar Display in Hero */}
+  return (
+    <div className="space-y-16 pb-20 text-stone-900 dark:text-stone-100">
+      {/* Calm & Reverent Hero Section */}
+      <section className="relative overflow-hidden bg-stone-900 text-stone-100 pt-14 pb-20 px-4 sm:px-6 rounded-b-[2rem] border-b border-stone-800">
+        <div className="max-w-4xl mx-auto relative z-10 text-center space-y-6">
+          {/* Saint Paul Icon Avatar Display */}
           <div className="flex justify-center">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-amber-400/80 shadow-2xl overflow-hidden bg-amber-100 p-1">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-600/60 shadow-md overflow-hidden bg-stone-800 p-0.5">
               <img
                 src="/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg"
                 alt="القديس بولس الرسول"
@@ -52,34 +68,54 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-200 text-xs sm:text-sm font-medium backdrop-blur-md">
+          {/* Church Affiliation Tag */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-stone-800/80 border border-stone-700 text-stone-300 text-xs font-medium">
             <span>☩</span>
             <span>كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-amber-50 tracking-tight leading-tight max-w-4xl mx-auto">
-            مدرسة <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-200 to-amber-400">سانت بولس</span> للكتاب المقدس
+          {/* Main Title */}
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-amber-50">
+            مدرسة سانت بولس للكتاب المقدس
           </h1>
 
-          <p className="text-base sm:text-xl text-amber-100/80 max-w-2xl mx-auto leading-relaxed font-normal">
-            منظومة كنسية تعليمية وتربوية متكاملة لـ ٧ فصول دراسية، مع نظام الحضور الإلكتروني بـ QR Code، ورصد فوري للدرجات (٢٤ درجة للسيشن، ٦٠ أعمال سنة، ٤٠ امتحان نهائي).
-          </p>
+          {/* User Requested Body Introduction */}
+          <div className="space-y-2 max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg text-stone-200 font-medium leading-relaxed">
+              أهلاً بك في مدرسة سانت بولس للكتاب المقدس
+            </p>
+            <p className="text-xs sm:text-sm text-stone-300/90 leading-relaxed">
+              وهنا ستتعلم معنا الكتاب المقدس بطريقة رائعة من خلال عدة محاور وهي:
+            </p>
+          </div>
 
-          {/* St. Paul Verse Banner */}
-          <div className="max-w-2xl mx-auto bg-amber-900/30 border border-amber-500/30 rounded-2xl p-4 text-amber-200/90 text-xs sm:text-sm italic font-serif">
-            «كُلُّ الْكِتَابِ هُوَ مُوحىً بِهِ مِنَ اللهِ، وَنَافِعٌ لِلتَّعْلِيمِ وَالتَّوْبِيخِ، لِلتَّقْوِيمِ وَالتَّأْدِيبِ الَّذِي فِي الْبِرِّ»
-            <span className="block text-[11px] text-amber-400 mt-1 not-italic font-sans">
-              (رسالة القديس بولس الرسول الثانية إلى تيموثاوس ٣ : ١٦)
-            </span>
+          {/* The 5 Study Pillars Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-3 text-right">
+            {studyPillars.map((pillar, idx) => (
+              <div
+                key={idx}
+                className="bg-stone-800/70 border border-stone-700/80 rounded-xl p-3.5 space-y-1.5 transition-colors hover:border-amber-600/50"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{pillar.icon}</span>
+                  <h3 className="font-bold text-amber-200 text-xs sm:text-sm">
+                    {pillar.title}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-stone-300 leading-relaxed">
+                  {pillar.subtitle}
+                </p>
+              </div>
+            ))}
           </div>
 
           {/* Action CTAs */}
           <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={() => onOpenAuth('register')}
-              className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-sm shadow-lg shadow-amber-900/40 hover:scale-105 transition-all flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-medium text-xs sm:text-sm shadow-xs transition-all flex items-center gap-2 cursor-pointer"
             >
-              <span>انضم للمدرسة (تسجيل جديد)</span>
+              <span>انضم للمدرسة (تسجيل حساب جديد)</span>
               <ChevronLeft className="w-4 h-4" />
             </button>
 
@@ -94,7 +130,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     onNavigateTab('student');
                   }
                 }}
-                className="px-6 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-amber-100 border border-amber-300/30 text-sm font-semibold backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs sm:text-sm font-medium transition-all flex items-center gap-2 cursor-pointer"
               >
                 <span>دخول إلى لوحتي ({currentUser.name})</span>
                 <ArrowRight className="w-4 h-4" />
@@ -102,157 +138,76 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             ) : (
               <button
                 onClick={() => onOpenAuth('login')}
-                className="px-6 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-amber-100 border border-amber-300/30 text-sm font-semibold backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-xs sm:text-sm font-medium transition-all flex items-center gap-2 cursor-pointer"
               >
                 <span>تسجيل الدخول للمنصة</span>
               </button>
             )}
           </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-8 border-t border-amber-800/40 text-right">
-            <div className="bg-white/5 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
-              <div className="text-2xl font-black text-amber-300">٧ فصول</div>
-              <div className="text-xs text-amber-200/70">رابعة، خامسة، سادسة، أولى، ثانية وثالثة، ثانوي، كبار</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
-              <div className="text-2xl font-black text-amber-300">٢٤ درجة للسيشن</div>
-              <div className="text-xs text-amber-200/70">١٠ امتحان + ١٠ واجب + ٤ درجات (حضور، صلاة، أدوات، مشاركة)</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
-              <div className="text-2xl font-black text-amber-300">٦٠ + ٤٠</div>
-              <div className="text-xs text-amber-200/70">أعمال سنة دورية (٦٠) + امتحان نهائي (٤٠) = ١٠٠</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xs p-3.5 rounded-xl border border-white/10">
-              <div className="text-2xl font-black text-amber-300">اعتماد الأدمن</div>
-              <div className="text-xs text-amber-200/70">موافقة مسبقة على المسجلين ومذكرات الخدام</div>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* Activities & What Happens Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 space-y-12">
-        <div className="text-center max-w-3xl mx-auto space-y-3">
-          <span className="text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/80 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800">
-            المنظومة التعليمية المتكاملة
+      {/* The 7 Educational Classes Section */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+        <div className="text-center max-w-xl mx-auto space-y-1.5">
+          <span className="text-stone-500 dark:text-stone-400 text-xs font-semibold">
+            الفصول الدراسية
           </span>
-          <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-slate-100">
-            إيه اللي بيحصل داخل مدرسة سانت بولس؟
+          <h2 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-stone-100">
+            فصول مدرسة سانت بولس
           </h2>
-          <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base leading-relaxed">
-            المنصة تدمج التكنولوجيا الكنسية الحديثة مع الأصالة الآبائية لبناء شخصية مسيحية ناضجة تحيا بكلمة الله.
+          <p className="text-stone-500 dark:text-stone-400 text-xs">
+            ٧ فصول دراسية مقسمة بحسب المراحل العمرية
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 flex items-center justify-center">
-              <QrCode className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">١. حضور ذكي بـ QR Code</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              يقوم الخادم بفتح كود الـ QR على الشاشة أو الهاتف، ويمسح كل طالب الكود ليسجل حضوره فورياً ويحصل على درجة الحضور (١ من ١).
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 flex items-center justify-center">
-              <Award className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">٢. تقييم اللقاء (٢٤ درجة)</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              ١٠ درجات للامتحان، ١٠ درجات للواجب، درجة للحضور بالـ QR، درجة لحضور الصلاة، درجة للأدوات والنوتة، ودرجة للمشاركة، بإجمالي ٢٤ درجة لكل لقاء.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 flex items-center justify-center">
-              <Shield className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">٣. حوكمة مذكرات الخدام</h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              أي مذكرة أو بحث أو مسابقة يرفعها الخادم تمر أولاً عبر أمانة الخدمة لاعتمادها ومراجعتها قبل أن تصبح منشورة ومتاحة للطلاب.
-            </p>
-          </div>
-        </div>
-
-        {/* The 7 Educational Classes Grid */}
-        <div className="space-y-6 pt-6">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <span className="text-amber-700 dark:text-amber-400 text-xs font-bold bg-amber-100 dark:bg-amber-950/80 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800">
-              الفصول السبعة المستقلة
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
-              فصول مدرسة سانت بولس للكتاب المقدس
-            </h2>
-            <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm">
-              لكل مرحلة دراسية فصل مستقل ومنهج كتابي ولائحي مخصص
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {classes.map((cls, idx) => (
-              <div
-                key={cls.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs flex flex-col justify-between group hover:border-amber-400 transition-colors"
-              >
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-xs flex items-center justify-center">
-                      0{idx + 1}
-                    </span>
-                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                      {cls.ageRange}
-                    </span>
-                  </div>
-
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
-                    {cls.name}
-                  </h3>
-
-                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed min-h-[38px]">
-                    {cls.description}
-                  </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {classes.map((cls, idx) => (
+            <div
+              key={cls.id}
+              className="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 p-4 flex flex-col justify-between hover:border-amber-700/40 transition-colors"
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-stone-400 font-mono text-[11px]">
+                    ٠{idx + 1}
+                  </span>
+                  <span className="text-[10px] font-medium text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded">
+                    {cls.ageRange}
+                  </span>
                 </div>
 
-                <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    onClick={() => onOpenAuth('register')}
-                    className="w-full py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-bold transition-all text-center cursor-pointer"
-                  >
-                    الالتحاق بهذا الفصل
-                  </button>
-                </div>
+                <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                  {cls.name}
+                </h3>
+
+                <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed min-h-[36px]">
+                  {cls.description}
+                </p>
               </div>
-            ))}
-          </div>
+
+              <div className="pt-3 mt-3 border-t border-stone-100 dark:border-stone-800">
+                <button
+                  onClick={() => onOpenAuth('register')}
+                  className="w-full py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 text-xs font-medium transition-colors text-center cursor-pointer"
+                >
+                  الالتحاق بهذا الفصل
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Church Patron & Saint Paul Icon Card */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 text-center space-y-4">
-        <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-amber-400 shadow-md">
-          <img
-            src="/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg"
-            alt="أيقونة القديس بولس الرسول"
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
-          تحت رعاية آباء كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي
-        </h3>
-        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
-          «لأَنِّي لَسْتُ أَسْتَحِي بِإِنْجِيلِ الْمَسِيحِ، لأَنَّهُ قُوَّةُ اللهِ لِلْخَلاَصِ لِكُلِّ مَنْ يُؤْمِنُ» (رومية ١ : ١٦)
-        </p>
-
-        <div className="pt-2 flex justify-center gap-3">
-          <button
-            onClick={() => onOpenAuth('register')}
-            className="px-6 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
-          >
-            سجل الآن في مدرسة سانت بولس
-          </button>
+      {/* Biblical Verse Banner */}
+      <section className="max-w-3xl mx-auto px-4 text-center">
+        <div className="bg-stone-100 dark:bg-stone-900/80 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl space-y-1">
+          <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 font-serif italic">
+            «كُلُّ الْكِتَابِ هُوَ مُوحىً بِهِ مِنَ اللهِ، وَنَافِعٌ لِلتَّعْلِيمِ وَالتَّوْبِيخِ، لِلتَّقْوِيمِ وَالتَّأْدِيبِ الَّذِي فِي الْبِرِّ»
+          </p>
+          <span className="text-[11px] text-stone-500 dark:text-stone-400 font-sans block">
+            (رسالة القديس بولس الرسول الثانية إلى تيموثاوس ٣ : ١٦)
+          </span>
         </div>
       </section>
     </div>

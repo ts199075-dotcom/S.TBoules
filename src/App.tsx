@@ -11,6 +11,7 @@ import { StudentDashboard } from './components/StudentDashboard';
 import { ServantDashboard } from './components/ServantDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
+import { ClassId } from './types';
 import {
   Sparkles,
   Shield,
@@ -26,18 +27,26 @@ import {
 const MainAppContent: React.FC = () => {
   const { currentUser, switchUserById, resetDemoData, theme } = useApp();
 
-  const [currentTab, setCurrentTab] = useState<string>('home');
+  const [currentTab, setCurrentTab] = useState<string>('admin');
+  const [adminSubTab, setAdminSubTab] = useState<string>('classes');
+  const [adminClassId, setAdminClassId] = useState<ClassId>('primary_4');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
 
-  // Auto-route on role switch
+  const handleNavigateMaster = (tab: string, subTab?: string, classId?: ClassId) => {
+    setCurrentTab(tab);
+    if (subTab) setAdminSubTab(subTab);
+    if (classId) setAdminClassId(classId);
+  };
+
+  // Auto-route on role switch (STRICT: only admin can be on admin tab)
   useEffect(() => {
     if (!currentUser) {
-      setCurrentTab('home');
+      if (currentTab === 'admin') setCurrentTab('home');
       return;
     }
 
-    if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
+    if (currentUser.role === 'admin') {
       if (currentTab === 'student' || currentTab === 'servant') {
         setCurrentTab('admin');
       }
@@ -48,6 +57,10 @@ const MainAppContent: React.FC = () => {
     } else if (currentUser.role === 'student') {
       if (currentTab === 'admin' || currentTab === 'servant') {
         setCurrentTab('student');
+      }
+    } else {
+      if (currentTab === 'admin') {
+        setCurrentTab('home');
       }
     }
   }, [currentUser?.id, currentUser?.role]);
@@ -76,17 +89,18 @@ const MainAppContent: React.FC = () => {
       <div className="fixed -top-40 right-1/4 w-96 h-96 bg-amber-500/10 dark:bg-amber-500/5 rounded-full blur-3xl pointer-events-none z-0" />
       <div className="fixed -bottom-40 left-1/4 w-96 h-96 bg-blue-600/10 dark:bg-blue-600/5 rounded-full blur-3xl pointer-events-none z-0" />
 
-      {/* Top Navbar */}
-      <div className="relative z-10">
+      {/* Top Navbar with highest stacking context to never be covered by main */}
+      <div className="sticky top-0 z-50">
         <Navbar
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           onOpenAuth={handleOpenAuth}
+          onNavigateMaster={handleNavigateMaster}
         />
       </div>
 
       {/* Main Body */}
-      <main className="flex-1 relative z-10">
+      <main className="flex-1 relative z-0">
         {currentTab === 'home' && (
           <LandingPage
             onOpenAuth={handleOpenAuth}
@@ -98,101 +112,35 @@ const MainAppContent: React.FC = () => {
 
         {currentTab === 'servant' && <ServantDashboard />}
 
-        {currentTab === 'admin' && <AdminDashboard />}
+        {currentTab === 'admin' && (
+          currentUser?.role === 'admin' ? (
+            <AdminDashboard
+              initialTab={adminSubTab as any}
+              initialClassId={adminClassId}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-16 p-8 text-center bg-white dark:bg-stone-900 rounded-3xl border border-stone-200 dark:border-stone-800 shadow-lg space-y-4 text-stone-900 dark:text-stone-100">
+              <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mx-auto">
+                <Shield className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-lg">
+                صلاحية محظورة: لوحة الأدمن فقط
+              </h3>
+              <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+                عفواً، الدخول إلى لوحة التحكم والإدارة مخصص حصرياً لمسؤول النظام (أمين الخدمة: ts199075@gmail.com).
+              </p>
+              <button
+                onClick={() => setCurrentTab(currentUser?.role === 'servant' ? 'servant' : currentUser?.role === 'student' ? 'student' : 'home')}
+                className="px-6 py-2.5 rounded-xl bg-stone-900 dark:bg-amber-700 text-white font-medium text-xs cursor-pointer shadow-xs"
+              >
+                العودة إلى لوحتي المخصصة
+              </button>
+            </div>
+          )
+        )}
       </main>
 
-      {/* Floating Demo Role Switcher Dock for Instant Testing */}
-      <aside
-        aria-label="شريط التبديل التجريبي السريع"
-        className="fixed bottom-4 left-4 z-40 hidden lg:flex items-center gap-2 p-2 bg-slate-900/90 dark:bg-slate-800/90 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-amber-600/40 text-xs"
-      >
-        <div className="flex items-center gap-1.5 px-2 text-amber-300 font-bold border-l border-slate-700">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span className="text-[11px]">تجربة سريعة:</span>
-        </div>
 
-        <button
-          onClick={() => {
-            switchUserById('admin-1');
-            setCurrentTab('admin');
-          }}
-          className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-            currentUser?.id === 'admin-1'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'hover:bg-slate-800 text-slate-300'
-          }`}
-          title="دخول كـ مسؤول النظام وأمين الخدمة (أ. مينا عادل)"
-        >
-          👑 أمين الخدمة
-        </button>
-
-        <button
-          onClick={() => {
-            switchUserById('assistant-1');
-            setCurrentTab('admin');
-          }}
-          className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-            currentUser?.id === 'assistant-1'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'hover:bg-slate-800 text-slate-300'
-          }`}
-          title="دخول كـ مساعد إدارة ورصد درجات (د. مريم يوسف)"
-        >
-          🛡️ مساعد إدارة
-        </button>
-
-        <button
-          onClick={() => {
-            switchUserById('servant-1');
-            setCurrentTab('servant');
-          }}
-          className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-            currentUser?.id === 'servant-1'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'hover:bg-slate-800 text-slate-300'
-          }`}
-          title="دخول كـ خادم فصل (أ. بيشوي كمال)"
-        >
-          ✝️ خادم فصل
-        </button>
-
-        <button
-          onClick={() => {
-            switchUserById('student-1');
-            setCurrentTab('student');
-          }}
-          className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-            currentUser?.id === 'student-1'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'hover:bg-slate-800 text-slate-300'
-          }`}
-          title="دخول كـ طالب مفعل بالمنصة (فادي جورج)"
-        >
-          📖 مخدوم مفعل
-        </button>
-
-        <button
-          onClick={() => {
-            switchUserById('student-pending-1');
-            setCurrentTab('student');
-          }}
-          className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-            currentUser?.id === 'student-pending-1'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'hover:bg-slate-800 text-slate-300'
-          }`}
-          title="دخول كـ طالب جديد ينتظر موافقة الأدمن (توماس هاني)"
-        >
-          ⏳ مخدوم معلق
-        </button>
-
-        <button
-          onClick={() => handleOpenAuth('register')}
-          className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold transition-all cursor-pointer border border-amber-500/30 text-[11px]"
-        >
-          ➕ حساب جديد
-        </button>
-      </aside>
 
       {/* Footer */}
       <footer className="relative z-10 bg-slate-900 dark:bg-slate-950 text-white border-t border-slate-800 py-10 px-4 sm:px-6">

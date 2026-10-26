@@ -20,6 +20,7 @@ import {
   QrCode,
   Download,
   Share2,
+  LogOut,
 } from 'lucide-react';
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
@@ -36,6 +37,7 @@ export const StudentDashboard: React.FC = () => {
     getStudentScoreSummary,
     getClassLeaderboard,
     approveUser,
+    logout,
   } = useApp();
 
   const [showCertificate, setShowCertificate] = useState(false);
@@ -95,6 +97,13 @@ export const StudentDashboard: React.FC = () => {
             <CheckCircle2 className="w-4 h-4" />
             <span>⚡ تجربة فورية: اعتماد وقبول حسابي الآن كمسؤول</span>
           </button>
+          <button
+            onClick={logout}
+            className="px-4 py-2.5 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-rose-500" />
+            <span>تسجيل الخروج</span>
+          </button>
         </div>
       </div>
     );
@@ -109,9 +118,9 @@ export const StudentDashboard: React.FC = () => {
   const classSessions = sessions.filter((s) => s.classId === currentUser.classId);
   const latestSession = classSessions[classSessions.length - 1] || sessions[0];
 
-  // Approved posts for this student's class
+  // Approved posts STRICTLY targeted for this student's class only
   const classApprovedPosts = lessonPosts.filter(
-    (p) => (p.classId === currentUser.classId || p.classId === 'prep_2_3') && p.status === 'approved'
+    (p) => p.classId === currentUser.classId && p.status === 'approved'
   );
 
   // Analysis of lost marks
@@ -188,6 +197,15 @@ export const StudentDashboard: React.FC = () => {
           >
             <Trophy className="w-4 h-4" />
             <span>عرض شهادة التقدير</span>
+          </button>
+
+          <button
+            onClick={logout}
+            className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-rose-200 border border-white/15 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            title="تسجيل الخروج من الحساب"
+          >
+            <LogOut className="w-4 h-4 text-rose-400" />
+            <span>خروج</span>
           </button>
         </div>
       </div>

@@ -83,24 +83,26 @@ interface AppContextType {
   getClassLeaderboard: (classId: ClassId) => StudentScoreSummary[];
   getStudentSessionGrades: (studentId: string) => SessionGrade[];
 
-  // Notifications
+  // Notifications & Seeding
   markNotificationAsRead: (id: string) => void;
   clearNotifications: () => void;
   resetDemoData: () => void;
+  seedDemoData: () => void;
+  clearAllStudentsAndServants: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  USERS: 'st_paul_users_v2',
-  CURRENT_USER_ID: 'st_paul_current_uid_v2',
-  SESSIONS: 'st_paul_sessions_v2',
-  GRADES: 'st_paul_grades_v2',
-  FINAL_SCORES: 'st_paul_final_scores_v2',
-  SERVANT_SUBS: 'st_paul_servant_subs_v2',
-  NOTIFS: 'st_paul_notifs_v2',
-  POSTS: 'st_paul_posts_v2',
-  THEME: 'st_paul_theme_v2',
+  USERS: 'st_paul_users_v5',
+  CURRENT_USER_ID: 'st_paul_current_uid_v5',
+  SESSIONS: 'st_paul_sessions_v5',
+  GRADES: 'st_paul_grades_v5',
+  FINAL_SCORES: 'st_paul_final_scores_v5',
+  SERVANT_SUBS: 'st_paul_servant_subs_v5',
+  NOTIFS: 'st_paul_notifs_v5',
+  POSTS: 'st_paul_posts_v5',
+  THEME: 'st_paul_theme_v5',
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -116,7 +118,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
-    return saved || 'admin-1';
+    return saved && saved.trim() !== '' ? saved : 'admin-ts';
   });
 
   const [sessions, setSessions] = useState<BibleSession[]>(() => {
@@ -511,20 +513,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       content: postData.content,
       attachmentName: postData.attachmentName,
       createdAt: new Date().toISOString().split('T')[0],
-      status: 'pending_approval',
+      status: currentUser.role === 'admin' ? 'approved' : 'pending_approval',
+      approvedBy: currentUser.role === 'admin' ? currentUser.name : undefined,
+      approvedAt: currentUser.role === 'admin' ? new Date().toISOString().split('T')[0] : undefined,
     };
 
     setLessonPosts((prev) => [newPost, ...prev]);
 
-    const newNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      title: 'مادة تعليمية جديدة بانتظار الاعتماد',
-      message: `قام الخادم "${currentUser.name}" برفع منشور/درس بعنوان: "${postData.title}". يتطلب موافقتك لنشره للطلاب.`,
-      timestamp: 'الآن',
-      type: 'post_pending',
-      read: false,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
+    if (currentUser.role !== 'admin') {
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        title: 'مادة تعليمية جديدة بانتظار الاعتماد',
+        message: `قام الخادم "${currentUser.name}" برفع منشور/درس لفصل معين بعنوان: "${postData.title}". يتطلب موافقتك لنشره للطلاب.`,
+        timestamp: 'الآن',
+        type: 'post_pending',
+        read: false,
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    } else {
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        title: 'تم نشر إعلان/مذكرة جديدة',
+        message: `قام أمين الخدمة بنشر منشور جديد بعنوان "${postData.title}" مخصص لفصله المحدد.`,
+        timestamp: 'الآن',
+        type: 'post_approved',
+        read: false,
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    }
   };
 
   const approveLessonPost = (postId: string) => {
@@ -652,13 +668,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.removeItem(STORAGE_KEYS.POSTS);
 
     setUsers(INITIAL_USERS);
-    setCurrentUserId('admin-1');
+    setCurrentUserId('admin-ts');
     setSessions(INITIAL_SESSIONS);
     setGrades(INITIAL_SESSION_GRADES);
     setFinalExamScores(INITIAL_FINAL_EXAM_SCORES);
     setServantSubmissions(INITIAL_SERVANT_SUBMISSIONS);
     setNotifications(INITIAL_NOTIFICATIONS);
     setLessonPosts(INITIAL_LESSON_POSTS);
+  };
+
+  const seedDemoData = () => {
+    const sampleUsers: UserProfile[] = [
+      // Primary 4
+      { id: 'stud-p4-1', name: 'مارك مينا إبراهيم', role: 'student', classId: 'primary_4', age: 9, status: 'active', phone: '01011112222', registeredAt: '2026-10-10' },
+      { id: 'stud-p4-2', name: 'مارينا يوسف سمير', role: 'student', classId: 'primary_4', age: 10, status: 'active', phone: '01011112223', registeredAt: '2026-10-11' },
+      // Primary 5
+      { id: 'stud-p5-1', name: 'بيتر هاني سامي', role: 'student', classId: 'primary_5', age: 11, status: 'active', phone: '01022223331', registeredAt: '2026-10-10' },
+      { id: 'stud-p5-2', name: 'سارة إيهاب كامل', role: 'student', classId: 'primary_5', age: 11, status: 'active', phone: '01022223332', registeredAt: '2026-10-12' },
+      // Primary 6
+      { id: 'stud-p6-1', name: 'ديفيد رفيق عادل', role: 'student', classId: 'primary_6', age: 12, status: 'active', phone: '01033334441', registeredAt: '2026-10-10' },
+      { id: 'stud-p6-2', name: 'كاترين عماد فوزي', role: 'student', classId: 'primary_6', age: 12, status: 'active', phone: '01033334442', registeredAt: '2026-10-13' },
+      // Prep 1
+      { id: 'stud-pr1-1', name: 'كيرلس مجدي ناصف', role: 'student', classId: 'prep_1', age: 13, status: 'active', phone: '01044445551', registeredAt: '2026-10-10' },
+      { id: 'stud-pr1-2', name: 'فيرونيكا ماجد فخري', role: 'student', classId: 'prep_1', age: 13, status: 'active', phone: '01044445552', registeredAt: '2026-10-14' },
+      // Prep 2 & 3
+      { id: 'stud-pr2-1', name: 'أبانوب فادي نصحي', role: 'student', classId: 'prep_2_3', age: 14, status: 'active', phone: '01055556661', registeredAt: '2026-10-10' },
+      { id: 'stud-pr2-2', name: 'مريم صبحي غالي', role: 'student', classId: 'prep_2_3', age: 15, status: 'active', phone: '01055556662', registeredAt: '2026-10-15' },
+      // Secondary
+      { id: 'stud-sec-1', name: 'توماس رمزي لطيف', role: 'student', classId: 'secondary', age: 16, status: 'active', phone: '01066667771', registeredAt: '2026-10-10' },
+      { id: 'stud-sec-2', name: 'مونيكا رفعت عزيز', role: 'student', classId: 'secondary', age: 17, status: 'active', phone: '01066667772', registeredAt: '2026-10-16' },
+      // Adults
+      { id: 'stud-ad-1', name: 'فادي نسيم وهبة', role: 'student', classId: 'adults', age: 22, status: 'active', phone: '01077778881', registeredAt: '2026-10-10' },
+      { id: 'stud-ad-2', name: 'كرستين جورج لمعي', role: 'student', classId: 'adults', age: 24, status: 'active', phone: '01077778882', registeredAt: '2026-10-17' },
+      // Servants
+      { id: 'serv-1', name: 'الخادم مينا عاطف', role: 'servant', classId: 'prep_2_3', age: 30, status: 'active', phone: '01099990001', registeredAt: '2026-09-15' },
+      { id: 'serv-2', name: 'الخادمة ليديا عادل', role: 'servant', classId: 'primary_4', age: 28, status: 'active', phone: '01099990002', registeredAt: '2026-09-15' },
+      // Pending student for review
+      { id: 'stud-pending-1', name: 'يوحنا سامح عازر', role: 'student', classId: 'prep_2_3', age: 14, status: 'pending', phone: '01088889991', registeredAt: '2026-10-25' },
+    ];
+
+    setUsers([INITIAL_USERS[0], ...sampleUsers]);
+  };
+
+  const clearAllStudentsAndServants = () => {
+    setUsers(INITIAL_USERS);
+    setGrades([]);
+    setFinalExamScores({});
   };
 
   return (
@@ -698,6 +753,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         markNotificationAsRead,
         clearNotifications,
         resetDemoData,
+        seedDemoData,
+        clearAllStudentsAndServants,
       }}
     >
       {children}

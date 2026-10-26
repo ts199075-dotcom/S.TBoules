@@ -19,6 +19,7 @@ import {
   QrCode,
   Share2,
   Plus,
+  LogOut,
 } from 'lucide-react';
 import { QrAttendanceModal } from './QrAttendanceModal';
 import { BibleSession } from '../types';
@@ -34,6 +35,7 @@ export const ServantDashboard: React.FC = () => {
     submitServantCheckIn,
     createLessonPost,
     getStudentScoreSummary,
+    logout,
   } = useApp();
 
   const currentSubmission = servantSubmissions.find(
@@ -164,6 +166,15 @@ export const ServantDashboard: React.FC = () => {
               <span>فتح QR كود حضور الجلسة للطلاب 📱</span>
             </button>
           )}
+
+          <button
+            onClick={logout}
+            className="px-3.5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-rose-200 border border-white/15 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            title="تسجيل الخروج من الحساب"
+          >
+            <LogOut className="w-4 h-4 text-rose-400" />
+            <span>خروج</span>
+          </button>
         </div>
       </div>
 
