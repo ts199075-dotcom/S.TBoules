@@ -48,13 +48,15 @@ export interface StudentScoreSummary {
   studentId: string;
   studentName: string;
   classId: ClassId;
-  totalSessionsCount: number;
+  totalSessionsCount: number;   // إجمالي حصص الكورس (٨ حصص)
+  gradedSessionsCount: number;  // عدد الحصص المرصودة حتى الآن (من ٨)
   attendedSessionsCount: number;
-  yearWorkScore: number;     // من 60 (متوسط السيشنات)
-  finalExamScore: number;    // من 40
-  totalScore: number;        // من 100
-  rank?: number;             // الترتيب في الفصل
-  isTopStudent?: boolean;    // من الأوائل
+  yearWorkScore: number;        // من 60 (متوسط الـ ٨ حصص)
+  finalExamScore: number;       // من 40
+  totalScore: number;           // من 100
+  isCalculated: boolean;        // هل تم اعتماد واحتساب المتوسط بأمر الأدمن؟
+  rank?: number;                // الترتيب في الفصل
+  isTopStudent?: boolean;       // من الأوائل
 }
 
 export interface ServantAttendanceSubmission {

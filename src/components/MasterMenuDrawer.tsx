@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { ClassId } from '../types';
 import {
@@ -37,20 +38,34 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
 }) => {
   const { currentUser, classes, users, theme, toggleTheme, logout } = useApp();
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const isAdmin = currentUser?.role === 'admin';
 
-  return (
-    <div className="fixed inset-0 z-[120] overflow-hidden" dir="rtl">
-      {/* Backdrop */}
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] overflow-hidden" dir="rtl">
+      {/* High-priority Backdrop */}
       <div
-        className="fixed inset-0 bg-stone-950/60 backdrop-blur-xs transition-opacity duration-300"
+        className="fixed inset-0 z-[99998] bg-black/75 backdrop-blur-xs transition-opacity duration-300"
         onClick={onClose}
       />
 
       {/* Slide-over Drawer (From Right in RTL) */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 z-[99999]">
         <div className="w-screen max-w-md bg-white dark:bg-stone-900 border-l border-stone-200 dark:border-stone-800 shadow-2xl flex flex-col text-right">
           {/* Drawer Header */}
           <div className="p-4 sm:p-5 bg-gradient-to-r from-stone-900 via-amber-950 to-stone-900 text-white border-b border-stone-800 flex items-center justify-between">
@@ -153,43 +168,25 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
               </span>
 
               <div className="space-y-1.5">
-                {/* الطلاب ورصد الدرجات */}
+                {/* كشف الطلاب لجميع الفصول */}
                 <button
                   onClick={() => {
                     onClose();
-                    onNavigate('admin', 'classes');
+                    onNavigate('admin', 'students');
                   }}
                   className="w-full p-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/60 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-between text-right cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
                     <GraduationCap className="w-4 h-4 text-amber-600" />
                     <div>
-                      <div className="font-bold text-stone-800 dark:text-stone-200">الطلاب ورصد الدرجات الفوري</div>
-                      <div className="text-[10px] text-stone-500">حضور، صلاة، أدوات، مشاركة، واجب، امتحان (٢٤ درجة)</div>
+                      <div className="font-bold text-stone-800 dark:text-stone-200">كشف الطلاب (إضافة / نقل / حذف)</div>
+                      <div className="text-[10px] text-stone-500">كشف شامل بكل الطلاب وتوزيعهم على الفصول</div>
                     </div>
                   </div>
                   <span className="text-stone-400 text-xs">←</span>
                 </button>
 
-                {/* كشف الدرجات والأوائل */}
-                <button
-                  onClick={() => {
-                    onClose();
-                    onNavigate('admin', 'scores');
-                  }}
-                  className="w-full p-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/60 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-between text-right cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Trophy className="w-4 h-4 text-amber-500" />
-                    <div>
-                      <div className="font-bold text-stone-800 dark:text-stone-200">كشف الدرجات والترتيب والأوائل</div>
-                      <div className="text-[10px] text-stone-500">أعمال سنة ٦٠ + امتحان نهائي ٤٠ = المجموع ١٠٠</div>
-                    </div>
-                  </div>
-                  <span className="text-stone-400 text-xs">←</span>
-                </button>
-
-                {/* الخدام والتحضيرات */}
+                {/* كشف الخدام ومتابعة الحضور والتحضير */}
                 <button
                   onClick={() => {
                     onClose();
@@ -200,8 +197,26 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
                   <div className="flex items-center gap-2.5">
                     <Users className="w-4 h-4 text-blue-600" />
                     <div>
-                      <div className="font-bold text-stone-800 dark:text-stone-200">الخدام ومتابعة التحضيرات</div>
-                      <div className="text-[10px] text-stone-500">تأكيد حضور لقاء الجمعة ومذكرات الشرح</div>
+                      <div className="font-bold text-stone-800 dark:text-stone-200">كشف الخدام ومساعدو الإدارة</div>
+                      <div className="text-[10px] text-stone-500">متابعة حضور الخادم، هل رفع الدرس، وتعيين فصله ورتبته</div>
+                    </div>
+                  </div>
+                  <span className="text-stone-400 text-xs">←</span>
+                </button>
+
+                {/* رصد الدرجات وأعمال السنة */}
+                <button
+                  onClick={() => {
+                    onClose();
+                    onNavigate('admin', 'scores');
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/60 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-between text-right cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Trophy className="w-4 h-4 text-amber-500" />
+                    <div>
+                      <div className="font-bold text-stone-800 dark:text-stone-200">رصد الدرجات وكشف الأوائل</div>
+                      <div className="text-[10px] text-stone-500">متوسط ٨ حصص (٦٠) + امتحان نهائي (٤٠) = ١٠٠</div>
                     </div>
                   </div>
                   <span className="text-stone-400 text-xs">←</span>
@@ -310,6 +325,7 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

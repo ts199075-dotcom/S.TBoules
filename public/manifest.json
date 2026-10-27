@@ -1,0 +1,28 @@
+{
+  "id": "/",
+  "name": "مدرسة سانت بولس للكتاب المقدس",
+  "short_name": "سانت بولس",
+  "description": "المنصة التعليمية الشاملة لمدرسة سانت بولس للكتاب المقدس - كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#78350f",
+  "background_color": "#ffffff",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

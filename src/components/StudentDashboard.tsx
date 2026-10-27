@@ -234,17 +234,27 @@ export const StudentDashboard: React.FC = () => {
             <Calendar className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="flex items-baseline gap-1 mt-2">
-            <span className="text-4xl font-black text-emerald-700 dark:text-emerald-400">{summary.yearWorkScore}</span>
-            <span className="text-sm font-bold text-slate-400">/ ٦٠</span>
+            {summary.isCalculated ? (
+              <>
+                <span className="text-4xl font-black text-emerald-700 dark:text-emerald-400">{summary.yearWorkScore}</span>
+                <span className="text-sm font-bold text-slate-400">/ ٦٠</span>
+              </>
+            ) : (
+              <span className="text-xl font-bold text-amber-700 dark:text-amber-400">
+                جارٍ الرصد ({summary.gradedSessionsCount}/٨)
+              </span>
+            )}
           </div>
           <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
             <div
               className="bg-emerald-600 h-full rounded-full transition-all duration-700"
-              style={{ width: `${(summary.yearWorkScore / 60) * 100}%` }}
+              style={{ width: `${summary.isCalculated ? (summary.yearWorkScore / 60) * 100 : (summary.gradedSessionsCount / 8) * 100}%` }}
             />
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-            متوسط درجات اللقاءات (من ٢٤) محسوبة ومُعادلة من ٦٠ درجة
+            {summary.isCalculated
+              ? 'تم اعتماد واحتساب متوسط الـ ٨ حصص كاملة من ٦٠ درجة'
+              : 'بانتظار استيفاء رصد الـ ٨ حصص واعتماد المتوسط بأمر الإدارة'}
           </p>
         </div>
 

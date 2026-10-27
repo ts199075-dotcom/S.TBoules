@@ -1,0 +1,118 @@
+{
+  "users": [
+    {
+      "id": "admin-ts",
+      "name": "أمين الخدمة ومسؤول النظام",
+      "email": "ts199075@gmail.com",
+      "phone": "01000000000",
+      "password": "987321987",
+      "age": 35,
+      "role": "admin",
+      "status": "active",
+      "registeredAt": "2026-09-01",
+      "notes": "الحساب الرئيسي لإدارة مدرسة سانت بولس للكتاب المقدس"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "sess-p4-1",
+      "title": "اللقاء الأول: خلقة العالم ومحبة الله الفائقة",
+      "classId": "primary_4",
+      "date": "2026-10-24",
+      "biblePassage": "تكوين ١ : ١ - تكوين ٢ : ٧",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-P4-101",
+      "qrActive": true
+    },
+    {
+      "id": "sess-p5-1",
+      "title": "اللقاء الأول: خروج الشعب وخروف الفصح",
+      "classId": "primary_5",
+      "date": "2026-10-24",
+      "biblePassage": "خروج ١٢ : ١ - خروج ١٢ : ١٤",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-P5-101",
+      "qrActive": true
+    },
+    {
+      "id": "sess-p6-1",
+      "title": "اللقاء الأول: يشوع بن نون وعبور الأردن",
+      "classId": "primary_6",
+      "date": "2026-10-24",
+      "biblePassage": "يشوع ٣ : ١ - يشوع ٣ : ١٧",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-P6-101",
+      "qrActive": true
+    },
+    {
+      "id": "sess-prep1-1",
+      "title": "اللقاء الأول: مزامير داود النبي والرجاء المسياني",
+      "classId": "prep_1",
+      "date": "2026-10-24",
+      "biblePassage": "مزمور ٢٢ : ١ - مزمور ٢٢ : ٣١",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-PR1-101",
+      "qrActive": true
+    },
+    {
+      "id": "sess-prep23-1",
+      "title": "اللقاء الأول: دعوة القديس بولس وررسالته إلى غلاطية",
+      "classId": "prep_2_3",
+      "date": "2026-10-24",
+      "biblePassage": "غلاطية ١ : ١ - غلاطية ١ : ٢٤",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-PR23-101",
+      "qrActive": true
+    },
+    {
+      "id": "sess-sec-1",
+      "title": "اللقاء الأول: لاهوت الفداء وبر الله في رسالة رومية",
+      "classId": "secondary",
+      "date": "2026-10-24",
+      "biblePassage": "رومية ٣ : ٢١ - رومية ٥ : ١",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-SEC-101",
+      "qrActive": true
+    },
+    {
+      "id": "sess-adults-1",
+      "title": "اللقاء الأول: المدخل الآبائي لدراسة العهد الجديد",
+      "classId": "adults",
+      "date": "2026-10-24",
+      "biblePassage": "عبرانيين ١ : ١ - عبرانيين ٢ : ٤",
+      "servantName": "أمانة الخدمة",
+      "maxScorePerMetric": 10,
+      "qrSecretCode": "STPAUL-AD-101",
+      "qrActive": true
+    }
+  ],
+  "grades": [],
+  "finalExamScores": {},
+  "servantSubmissions": [],
+  "notifications": [
+    {
+      "id": "notif-1793090600306",
+      "title": "تم اعتماد وتفعيل الحساب ✅",
+      "message": "تم قبول انضمام بيشوي حنا كامل وتفعيل حسابه رسمياً.",
+      "timestamp": "الآن",
+      "type": "new_student",
+      "read": false
+    },
+    {
+      "id": "notif-1793090594821",
+      "title": "طلب التحاق مخدوم جديد",
+      "message": "سجل بيشوي حنا كامل (كمخدوم) وينتظر موافقة أمين الخدمة.",
+      "timestamp": "الآن",
+      "type": "new_student",
+      "read": false
+    }
+  ],
+  "lessonPosts": [],
+  "yearWorkApprovedClasses": {}
+}
