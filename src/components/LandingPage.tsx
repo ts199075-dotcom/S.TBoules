@@ -12,6 +12,8 @@ import {
   Compass,
 } from 'lucide-react';
 
+import { SchoolVisionSection } from './SchoolVisionSection';
+
 interface LandingPageProps {
   onOpenAuth: (mode?: 'login' | 'register') => void;
   onNavigateTab: (tab: string) => void;
@@ -146,6 +148,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* School Vision & Mission Section */}
+      <SchoolVisionSection />
 
       {/* The 7 Educational Classes Section */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">

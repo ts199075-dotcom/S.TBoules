@@ -38,8 +38,10 @@ import {
 } from 'lucide-react';
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
+import { StudentsRosterSection } from './admin/StudentsRosterSection';
+import { ServantsSection } from './admin/ServantsSection';
 
-export type AdminTab = 'classes' | 'scores' | 'pending' | 'post_approvals' | 'servants' | 'assistants' | 'reports' | 'events';
+export type AdminTab = 'students' | 'servants' | 'classes' | 'scores' | 'pending' | 'post_approvals' | 'reports' | 'events';
 
 interface AdminDashboardProps {
   initialTab?: AdminTab;
@@ -62,12 +64,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     approveUser,
     rejectUser,
     toggleAssistantRole,
+    deleteUser,
+    addStudentByAdmin,
+    changeStudentClass,
+    updateServantProfile,
     saveSessionGrade,
     updateFinalExamScore,
     addNewSession,
     approveLessonPost,
     rejectLessonPost,
     createLessonPost,
+    yearWorkApprovedClasses,
     getStudentScoreSummary,
     getClassLeaderboard,
     getStudentSessionGrades,
@@ -78,7 +85,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   } = useApp();
 
   const [featuresModalOpen, setFeaturesModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab || 'classes');
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab || 'students');
   const [selectedClassId, setSelectedClassId] = useState<ClassId>(initialClassId || 'primary_4');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -171,6 +178,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     studentName: string;
     className: string;
     totalScore: number;
+    yearWorkScore: number;
+    gradedSessionsCount: number;
+    isCalculated: boolean;
     rank?: number;
   } | null>(null);
 
@@ -207,16 +217,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setGradeTools(existingGrade.tools);
       setGradeNotes(existingGrade.notes || '');
     } else {
-      setGradeExam(10);
-      setGradeHomework(10);
-      setGradeAttendance(1);
-      setGradeParticipation(1);
-      setGradePrayer(1);
-      setGradeTools(1);
+      setGradeExam(0);
+      setGradeHomework(0);
+      setGradeAttendance(0);
+      setGradeParticipation(0);
+      setGradePrayer(0);
+      setGradeTools(0);
       setGradeNotes('');
     }
 
     setGradingModalOpen(true);
+  };
+
+  const handleOpenFinalExam = (student: UserProfile) => {
+    setStudentForFinalExam(student);
+    const existing = finalExamScores[student.id] ?? 0;
+    setTempFinalScore(existing);
+    setFinalExamModalOpen(true);
+  };
+
+  const handleOpenCertificate = (student: UserProfile) => {
+    const cls = classes.find((c) => c.id === student.classId);
+    const summary = getStudentScoreSummary(student.id);
+    setCertData({
+      studentName: student.name,
+      className: cls?.name || 'فصل كتاب مقدس',
+      yearWorkScore: summary.yearWorkScore,
+      totalScore: summary.totalScore,
+      gradedSessionsCount: summary.gradedSessionsCount,
+      isCalculated: summary.isCalculated,
+      rank: 1,
+    });
   };
 
   const handleSaveGrade = (e: React.FormEvent) => {
@@ -333,7 +364,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Students Card */}
         <div
-          onClick={() => setActiveTab('classes')}
+          onClick={() => setActiveTab('students')}
           className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-xs hover:border-amber-500/50 hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
@@ -489,6 +520,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* Main Tabs Navigation */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
         <button
+          onClick={() => setActiveTab('students')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'students'
+              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+          }`}
+        >
+          <Users className="w-4 h-4 text-amber-500" />
+          <span>كشف الطلاب (إضافة / حذف / نقل)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('servants')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'servants'
+              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+          }`}
+        >
+          <UserCheck className="w-4 h-4 text-emerald-500" />
+          <span>كشف الخدام ومساعدو الإدارة ({totalServants.length})</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('classes')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'classes'
@@ -547,30 +602,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('servants')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'servants'
-              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
-              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-          }`}
-        >
-          <FileCheck className="w-4 h-4" />
-          <span>متابعة الخدام والتحضيرات ({servantSubmissions.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('assistants')}
-          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'assistants'
-              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
-              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-          }`}
-        >
-          <Shield className="w-4 h-4" />
-          <span>مساعدو الإدارة والصلاحيات</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('reports')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'reports'
@@ -594,6 +625,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <span>الحفلات والمناسبات والتكريمات</span>
         </button>
       </div>
+
+      {/* TAB: سيكشن كشف الطلاب (إضافة / حذف / نقل) */}
+      {activeTab === 'students' && (
+        <StudentsRosterSection
+          users={users}
+          classes={classes}
+          grades={grades}
+          addStudentByAdmin={addStudentByAdmin}
+          changeStudentClass={changeStudentClass}
+          deleteUser={deleteUser}
+          approveUser={approveUser}
+          onOpenGrading={handleOpenGrading}
+          onOpenCertificate={handleOpenCertificate}
+          yearWorkApprovedClasses={yearWorkApprovedClasses}
+        />
+      )}
+
+      {/* TAB: سيكشن الخدام ومساعدو الإدارة والتحضيرات */}
+      {activeTab === 'servants' && (
+        <ServantsSection
+          users={users}
+          classes={classes}
+          servantSubmissions={servantSubmissions}
+          lessonPosts={lessonPosts}
+          updateServantProfile={updateServantProfile}
+          toggleAssistantRole={toggleAssistantRole}
+          deleteUser={deleteUser}
+        />
+      )}
 
       {/* TAB 1: سيكشن الفصول والطلاب والدرجات (7 Classes) */}
       {activeTab === 'classes' && (
@@ -828,7 +888,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setCertData({
                               studentName: top2.studentName,
                               className: currentClassObj.name,
+                              yearWorkScore: top2.yearWorkScore,
                               totalScore: top2.totalScore,
+                              gradedSessionsCount: top2.gradedSessionsCount,
+                              isCalculated: top2.isCalculated,
                               rank: 2,
                             })
                           }
@@ -850,7 +913,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setCertData({
                               studentName: top1.studentName,
                               className: currentClassObj.name,
+                              yearWorkScore: top1.yearWorkScore,
                               totalScore: top1.totalScore,
+                              gradedSessionsCount: top1.gradedSessionsCount,
+                              isCalculated: top1.isCalculated,
                               rank: 1,
                             })
                           }
@@ -872,7 +938,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setCertData({
                               studentName: top3.studentName,
                               className: currentClassObj.name,
+                              yearWorkScore: top3.yearWorkScore,
                               totalScore: top3.totalScore,
+                              gradedSessionsCount: top3.gradedSessionsCount,
+                              isCalculated: top3.isCalculated,
                               rank: 3,
                             })
                           }
@@ -971,7 +1040,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               setCertData({
                                 studentName: row.studentName,
                                 className: currentClassObj.name,
+                                yearWorkScore: row.yearWorkScore,
                                 totalScore: row.totalScore,
+                                gradedSessionsCount: row.gradedSessionsCount,
+                                isCalculated: row.isCalculated,
                                 rank: idx + 1,
                               })
                             }
@@ -1193,140 +1265,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* TAB 5: متابعة الخدام والتحضيرات */}
-      {activeTab === 'servants' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <FileCheck className="w-5 h-5 text-amber-700 dark:text-amber-400" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  متابعة حضور الخدام ورفع التحضيرات الأسبوعية
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                تسجيل الحضور أو الاعتذار لـ اجتماع الجمعة القادم مع تفاصيل ومرفقات تحضير الدروس.
-              </p>
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            {servantSubmissions.map((sub) => {
-              const isAttending = sub.status === 'attending';
-
-              return (
-                <div
-                  key={sub.id}
-                  className={`p-5 rounded-2xl border text-xs space-y-3 transition-all ${
-                    isAttending
-                      ? 'bg-slate-50/70 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
-                      : 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700 pb-2.5">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${isAttending ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'}`}>
-                        {isAttending ? '✓' : '✗'}
-                      </div>
-                      <div>
-                        <div className="font-bold text-sm text-slate-900 dark:text-slate-100">{sub.servantName}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">{sub.servantPhone}</div>
-                      </div>
-                    </div>
-
-                    <span className={`px-3 py-1 rounded-full font-bold text-xs ${isAttending ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
-                      {isAttending ? 'حاضر بإذن المسيح ✅' : 'معتذر عن الحضور ❌'}
-                    </span>
-                  </div>
-
-                  {!isAttending ? (
-                    <div className="bg-rose-100/50 dark:bg-rose-950/40 p-3 rounded-xl text-rose-900 dark:text-rose-300">
-                      <strong>سبب الاعتذار:</strong> {sub.absenceReason || 'ظرف طارئ'}
-                    </div>
-                  ) : (
-                    <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                      <strong className="text-slate-800 dark:text-slate-200 block text-xs">عنوان الدرس المرفوع: {sub.prepTitle}</strong>
-                      {sub.prepBibleVerse && <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-lg">الشاهد: {sub.prepBibleVerse}</div>}
-                      {sub.prepAttachmentName && (
-                        <div className="text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-2 pt-1">
-                          <FileText className="w-4 h-4" />
-                          <span>المرفق المعتمد: {sub.prepAttachmentName}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 6: مساعدو الإدارة والصلاحيات */}
-      {activeTab === 'assistants' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-amber-700 dark:text-amber-400" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  تحديد وتعيين مساعدي الإدارة
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                منح صلاحيات مساعد إدارة لرصد وتعديل الدرجات ومتابعة الطلاب.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {users
-              .filter((u) => u.role === 'servant' || u.role === 'assistant')
-              .map((servant) => {
-                const isAssistant = servant.role === 'assistant';
-
-                return (
-                  <div
-                    key={servant.id}
-                    className={`p-4 rounded-2xl border text-xs space-y-3 transition-all ${
-                      isAssistant
-                        ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-400 dark:border-amber-700 ring-2 ring-amber-500/20'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">{servant.name}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">{servant.phone}</div>
-                      </div>
-
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${isAssistant ? 'bg-amber-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                        {isAssistant ? '🛡️ مساعد إدارة معتمد' : 'خادم فصل'}
-                      </span>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">
-                        {isAssistant ? 'صلاحيات رصد درجات ومتابعة' : 'خدمة الفصل'}
-                      </span>
-
-                      <button
-                        onClick={() => toggleAssistantRole(servant.id)}
-                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
-                          isAssistant
-                            ? 'bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-700 dark:text-rose-300'
-                            : 'bg-amber-600 hover:bg-amber-700 text-white'
-                        }`}
-                      >
-                        {isAssistant ? 'إلغاء صفة المساعد' : 'تعيين كمساعد إدارة'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
 
       {/* TAB 7: التقارير والكشوفات والطباعة */}
       {activeTab === 'reports' && (
@@ -1711,6 +1650,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       setGradePrayer(existingGrade.prayer);
                       setGradeTools(existingGrade.tools);
                       setGradeNotes(existingGrade.notes || '');
+                    } else {
+                      setGradeExam(0);
+                      setGradeHomework(0);
+                      setGradeAttendance(0);
+                      setGradeParticipation(0);
+                      setGradePrayer(0);
+                      setGradeTools(0);
+                      setGradeNotes('');
                     }
                   }}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
@@ -1865,23 +1812,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setGradeAttendance((prev) => (prev >= 1 ? 0 : 1))}
-                      className={`p-3 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
+                      className={`p-3.5 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
                         gradeAttendance >= 1
-                          ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                          ? 'bg-emerald-600 text-white font-bold ring-2 ring-emerald-400 shadow-md border-emerald-700'
                           : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700 text-stone-500 hover:bg-stone-50 dark:hover:bg-stone-850'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">📱</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg">📱</span>
                         <div>
-                          <div className="text-xs font-bold">الحضور بالـ QR</div>
-                          <div className="text-[10px] mt-0.5 opacity-80">
-                            {gradeAttendance >= 1 ? 'حاضر باللقاء' : 'غائب عن اللقاء'}
+                          <div className={`text-xs font-black ${gradeAttendance >= 1 ? 'text-white' : 'text-stone-800 dark:text-stone-200'}`}>
+                            الحضور باللقاء (QR)
+                          </div>
+                          <div className={`text-[10px] mt-0.5 ${gradeAttendance >= 1 ? 'text-emerald-100 font-bold' : 'opacity-80'}`}>
+                            {gradeAttendance >= 1 ? 'حاضر باللقاء الآن ✅' : 'غائب عن اللقاء (اضغط للتحضير)'}
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeAttendance >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`}>
-                        {gradeAttendance >= 1 ? '١ / ١ ✅' : '٠ / ١ ⭕'}
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${gradeAttendance >= 1 ? 'bg-white text-emerald-800 shadow-xs' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`}>
+                        {gradeAttendance >= 1 ? '١ / ١ حاضر ✅' : '٠ / ١ غائب ⭕'}
                       </span>
                     </button>
 
@@ -2075,7 +2024,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <CertificateModal
           studentName={certData.studentName}
           className={certData.className}
+          yearWorkScore={certData.yearWorkScore}
           totalScore={certData.totalScore}
+          gradedSessionsCount={certData.gradedSessionsCount}
+          isCalculated={certData.isCalculated}
           rank={certData.rank}
           onClose={() => setCertData(null)}
         />

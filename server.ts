@@ -174,53 +174,128 @@ let currentDB = loadDB();
 
 // API Endpoints for Central Database
 
+// API Endpoints for Central Database
+
 // 1. Health & Status
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ ok: true, status: 'ok', success: true, time: new Date().toISOString() });
 });
 
 // 2. Fetch Central State (Used by all devices on load and polling)
 app.get('/api/state', (_req: Request, res: Response) => {
   // Reload in case file was touched externally
   currentDB = loadDB();
-  res.json({ success: true, data: currentDB });
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
 });
 
-// 3. User Registration (Student or Servant from mobile or desktop)
+// Helper for registration logic
+function handleRegister(data: any, res: Response) {
+  if (!data.name || !data.phone) {
+    res.status(400).json({ success: false, message: 'الاسم ورقم الهاتف مطلوبان' });
+    return;
+  }
+
+  const phoneTaken = currentDB.users.some((u) => u.phone === data.phone.trim());
+  if (phoneTaken) {
+    res.status(400).json({ success: false, message: 'رقم الهاتف مسجّل مسبقاً.' });
+    return;
+  }
+
+  const newId = `user-${Date.now()}`;
+  const newUser = {
+    ...data,
+    id: newId,
+    status: 'pending', // Requires admin approval
+    registeredAt: new Date().toISOString().split('T')[0],
+  };
+
+  currentDB.users = [newUser, ...currentDB.users];
+
+  // Notification for Admin
+  const newNotif = {
+    id: `notif-${Date.now()}`,
+    title: data.role === 'servant' ? 'طلب انضمام خادم جديد' : 'طلب التحاق مخدوم جديد',
+    message: `سجل ${newUser.name} (${data.role === 'servant' ? 'كخادم' : 'كمخدوم'}) وينتظر موافقة أمين الخدمة.`,
+    timestamp: 'الآن',
+    type: 'new_student',
+    read: false,
+  };
+  currentDB.notifications = [newNotif, ...currentDB.notifications];
+
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, user: newUser, currentUser: newUser, data: currentDB, ...currentDB });
+}
+
+// 3. User Registration (handles both /api/register and /api/auth/register)
 app.post('/api/register', (req: Request, res: Response) => {
   try {
-    const data = req.body;
-    if (!data.name || !data.phone) {
-      res.status(400).json({ success: false, message: 'الاسم ورقم الهاتف مطلوبان' });
-      return;
-    }
-
-    const newId = `user-${Date.now()}`;
-    const newUser = {
-      ...data,
-      id: newId,
-      status: 'pending', // Requires admin approval
-      registeredAt: new Date().toISOString().split('T')[0],
-    };
-
-    currentDB.users = [newUser, ...currentDB.users];
-
-    // Notification for Admin
-    const newNotif = {
-      id: `notif-${Date.now()}`,
-      title: data.role === 'servant' ? 'طلب انضمام خادم جديد' : 'طلب التحاق مخدوم جديد',
-      message: `سجل ${newUser.name} (${data.role === 'servant' ? 'كخادم' : 'كمخدوم'}) وينتظر موافقة أمين الخدمة.`,
-      timestamp: 'الآن',
-      type: 'new_student',
-      read: false,
-    };
-    currentDB.notifications = [newNotif, ...currentDB.notifications];
-
-    saveDB(currentDB);
-    res.json({ success: true, user: newUser, data: currentDB });
+    handleRegister(req.body, res);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.post('/api/auth/register', (req: Request, res: Response) => {
+  try {
+    handleRegister(req.body, res);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. Central Login
+app.post('/api/auth/login', (req: Request, res: Response) => {
+  try {
+    currentDB = loadDB();
+    const { identifier, password } = req.body;
+    if (!identifier || !password) {
+      res.status(400).json({ success: false, message: 'برجاء إدخال البريد أو الهاتف وكلمة المرور' });
+      return;
+    }
+
+    const inputTrim = identifier.trim().toLowerCase();
+    const passTrim = String(password).trim();
+
+    const found = currentDB.users.find(
+      (u) =>
+        (u.email && u.email.toLowerCase() === inputTrim) ||
+        u.phone === identifier.trim() ||
+        u.name.toLowerCase() === inputTrim
+    );
+
+    if (!found) {
+      res.status(404).json({ success: false, message: 'لم يتم العثور على حساب بهذا البريد أو رقم الهاتف.' });
+      return;
+    }
+
+    if (found.status === 'rejected') {
+      res.status(403).json({ success: false, message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.' });
+      return;
+    }
+
+    const expectedPassword = found.password || found.phone;
+    if (expectedPassword !== passTrim) {
+      res.status(401).json({ success: false, message: 'كلمة المرور غير صحيحة.' });
+      return;
+    }
+
+    const token = `token-${found.id}-${Date.now()}`;
+    res.json({
+      success: true,
+      ok: true,
+      token,
+      currentUser: found,
+      data: currentDB,
+      ...currentDB,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Central Logout
+app.post('/api/auth/logout', (_req: Request, res: Response) => {
+  res.json({ success: true, ok: true });
 });
 
 // 4. Admin User Actions (Approve, Reject, Toggle Assistant, Delete)
@@ -297,10 +372,44 @@ app.post('/api/users/action', (req: Request, res: Response) => {
     }
 
     saveDB(currentDB);
-    res.json({ success: true, data: currentDB });
+    res.json({ success: true, ok: true, data: currentDB, ...currentDB });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// REST aliases for user management
+app.post('/api/users/:userId/approve', (req: Request, res: Response) => {
+  const { userId } = req.params;
+  currentDB.users = currentDB.users.map((u) => (u.id === userId ? { ...u, status: 'active' } : u));
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+app.post('/api/users/:userId/reject', (req: Request, res: Response) => {
+  const { userId } = req.params;
+  currentDB.users = currentDB.users.map((u) => (u.id === userId ? { ...u, status: 'rejected' } : u));
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+app.post('/api/users/:userId/toggle-assistant', (req: Request, res: Response) => {
+  const { userId } = req.params;
+  currentDB.users = currentDB.users.map((u) => {
+    if (u.id === userId) {
+      return { ...u, role: u.role === 'assistant' ? 'servant' : 'assistant' };
+    }
+    return u;
+  });
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+app.delete('/api/users/:userId', (req: Request, res: Response) => {
+  const { userId } = req.params;
+  currentDB.users = currentDB.users.filter((u) => u.id !== userId);
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
 });
 
 // 5. Grades (Add / Update session score)
@@ -529,26 +638,144 @@ app.post('/api/year-work-lock', (req: Request, res: Response) => {
   }
 });
 
-// 12. Notifications (Mark read / Clear)
-app.post('/api/notifications', (req: Request, res: Response) => {
+// QR Attendance alternate endpoint
+app.post('/api/attendance/qr', (req: Request, res: Response) => {
   try {
-    const { action, id } = req.body;
-    if (action === 'markRead') {
-      currentDB.notifications = currentDB.notifications.map((n) =>
-        n.id === id ? { ...n, read: true } : n
-      );
-    } else if (action === 'clear') {
-      currentDB.notifications = [];
+    const { sessionId, secretCode, studentId } = req.body;
+    const session = currentDB.sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      res.status(404).json({ success: false, message: 'اللقاء غير موجود' });
+      return;
     }
 
-    saveDB(currentDB);
-    res.json({ success: true, data: currentDB });
+    // Try finding user from bearer token or body
+    let targetStudentId = studentId;
+    const authHeader = req.headers.authorization;
+    if (!targetStudentId && authHeader?.startsWith('Bearer token-')) {
+      const parts = authHeader.replace('Bearer token-', '').split('-');
+      targetStudentId = parts[0] + (parts[1] && !parts[1].match(/^\d+$/) ? '-' + parts[1] : '');
+    }
+
+    const timeString = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+    if (targetStudentId) {
+      const existingIndex = currentDB.grades.findIndex(
+        (g) => g.studentId === targetStudentId && g.sessionId === sessionId
+      );
+      if (existingIndex >= 0) {
+        currentDB.grades[existingIndex] = {
+          ...currentDB.grades[existingIndex],
+          attendance: 1,
+          qrAttendedAt: timeString,
+        };
+      } else {
+        currentDB.grades.push({
+          id: `grd-${Date.now()}`,
+          studentId: targetStudentId,
+          sessionId,
+          attendance: 1,
+          exam: 0,
+          homework: 0,
+          participation: 0,
+          prayer: 0,
+          tools: 0,
+          qrAttendedAt: timeString,
+          notes: 'حضور بالـ QR عبر الهاتف',
+        });
+      }
+      saveDB(currentDB);
+    }
+
+    res.json({ success: true, ok: true, message: `تم تسجيل حضورك بنجاح في: ${session.title}`, data: currentDB, ...currentDB });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// Servant Check-In
+app.post('/api/servant/check-in', (req: Request, res: Response) => {
+  try {
+    const submission = {
+      ...req.body,
+      id: `sub-${Date.now()}`,
+      submittedAt: new Date().toISOString(),
+    };
+    currentDB.servantSubmissions = [submission, ...currentDB.servantSubmissions];
+    saveDB(currentDB);
+    res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Session QR toggle
+app.post('/api/sessions/:sessionId/qr', (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  const { active } = req.body;
+  currentDB.sessions = currentDB.sessions.map((s) => (s.id === sessionId ? { ...s, qrActive: active } : s));
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+// Post approvals
+app.post('/api/posts/:postId/approve', (req: Request, res: Response) => {
+  const { postId } = req.params;
+  currentDB.lessonPosts = currentDB.lessonPosts.map((p) => (p.id === postId ? { ...p, status: 'approved' } : p));
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+app.post('/api/posts/:postId/reject', (req: Request, res: Response) => {
+  const { postId } = req.params;
+  const { reason } = req.body;
+  currentDB.lessonPosts = currentDB.lessonPosts.map((p) =>
+    p.id === postId ? { ...p, status: 'rejected', rejectionReason: reason } : p
+  );
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+// Notifications
+app.post('/api/notifications/:id/read', (req: Request, res: Response) => {
+  const { id } = req.params;
+  currentDB.notifications = currentDB.notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
+app.delete('/api/notifications', (_req: Request, res: Response) => {
+  currentDB.notifications = [];
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
 // 13. Admin Demo Seed / Reset
+const DEMO_SAMPLE_USERS = [
+  { id: 'stud-p4-1', name: 'مارك مينا إبراهيم', role: 'student', classId: 'primary_4', age: 9, status: 'active', phone: '01011112222', registeredAt: '2026-10-10' },
+  { id: 'stud-p4-2', name: 'مارينا يوسف سمير', role: 'student', classId: 'primary_4', age: 10, status: 'active', phone: '01011112223', registeredAt: '2026-10-11' },
+  { id: 'stud-p5-1', name: 'بيتر هاني سامي', role: 'student', classId: 'primary_5', age: 11, status: 'active', phone: '01022223331', registeredAt: '2026-10-10' },
+  { id: 'stud-p5-2', name: 'سارة إيهاب كامل', role: 'student', classId: 'primary_5', age: 11, status: 'active', phone: '01022223332', registeredAt: '2026-10-12' },
+  { id: 'stud-p6-1', name: 'ديفيد رفيق عادل', role: 'student', classId: 'primary_6', age: 12, status: 'active', phone: '01033334441', registeredAt: '2026-10-10' },
+  { id: 'stud-p6-2', name: 'كاترين عماد فوزي', role: 'student', classId: 'primary_6', age: 12, status: 'active', phone: '01033334442', registeredAt: '2026-10-13' },
+  { id: 'stud-pr1-1', name: 'كيرلس مجدي ناصف', role: 'student', classId: 'prep_1', age: 13, status: 'active', phone: '01044445551', registeredAt: '2026-10-10' },
+  { id: 'stud-pr1-2', name: 'فيرونيكا ماجد فخري', role: 'student', classId: 'prep_1', age: 13, status: 'active', phone: '01044445552', registeredAt: '2026-10-14' },
+  { id: 'stud-pr2-1', name: 'أبانوب فادي نصحي', role: 'student', classId: 'prep_2_3', age: 14, status: 'active', phone: '01055556661', registeredAt: '2026-10-10' },
+  { id: 'stud-pr2-2', name: 'مريم صبحي غالي', role: 'student', classId: 'prep_2_3', age: 15, status: 'active', phone: '01055556662', registeredAt: '2026-10-15' },
+  { id: 'stud-sec-1', name: 'توماس رمزي لطيف', role: 'student', classId: 'secondary', age: 16, status: 'active', phone: '01066667771', registeredAt: '2026-10-10' },
+  { id: 'stud-sec-2', name: 'مونيكا رفعت عزيز', role: 'student', classId: 'secondary', age: 17, status: 'active', phone: '01066667772', registeredAt: '2026-10-16' },
+  { id: 'stud-ad-1', name: 'فادي نسيم وهبة', role: 'student', classId: 'adults', age: 22, status: 'active', phone: '01077778881', registeredAt: '2026-10-10' },
+  { id: 'stud-ad-2', name: 'كرستين جورج لمعي', role: 'student', classId: 'adults', age: 24, status: 'active', phone: '01077778882', registeredAt: '2026-10-17' },
+  { id: 'serv-1', name: 'الخادم مينا عاطف', role: 'servant', classId: 'prep_2_3', age: 30, status: 'active', phone: '01099990001', registeredAt: '2026-09-15' },
+  { id: 'serv-2', name: 'الخادمة ليديا عادل', role: 'servant', classId: 'primary_4', age: 28, status: 'active', phone: '01099990002', registeredAt: '2026-09-15' },
+  { id: 'stud-pending-1', name: 'يوحنا سامح عازر', role: 'student', classId: 'prep_2_3', age: 14, status: 'pending', phone: '01088889991', registeredAt: '2026-10-25' },
+];
+
+app.post('/api/admin/seed', (_req: Request, res: Response) => {
+  currentDB.users = [INITIAL_ADMIN, ...DEMO_SAMPLE_USERS];
+  saveDB(currentDB);
+  res.json({ success: true, ok: true, data: currentDB, ...currentDB });
+});
+
 app.post('/api/admin/reset', (req: Request, res: Response) => {
   try {
     const { action } = req.body;
@@ -563,7 +790,7 @@ app.post('/api/admin/reset', (req: Request, res: Response) => {
       currentDB.yearWorkApprovedClasses = {};
     }
     saveDB(currentDB);
-    res.json({ success: true, data: currentDB });
+    res.json({ success: true, ok: true, data: currentDB, ...currentDB });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

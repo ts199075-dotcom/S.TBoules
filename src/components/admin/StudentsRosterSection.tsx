@@ -22,7 +22,7 @@ interface StudentsRosterSectionProps {
   users: UserProfile[];
   classes: ClassInfo[];
   grades: SessionGrade[];
-  addStudentByAdmin: (data: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => UserProfile;
+  addStudentByAdmin: (data: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => Promise<UserProfile> | UserProfile;
   changeStudentClass: (studentId: string, newClassId: ClassId) => void;
   deleteUser: (userId: string) => void;
   approveUser: (userId: string) => void;

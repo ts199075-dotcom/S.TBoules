@@ -43,6 +43,8 @@ export function computeStudentScoreSummary(
   }
 
   const attendedSessionsCount = studentGrades.filter((g) => Number(g.attendance || 0) >= 1).length;
+  const gradedSessionsCount = studentGrades.length;
+  const isCalculated = gradedSessionsCount >= 8;
   const finalExamScore = clamp(finalExamScores[studentId] ?? 0, 0, FINAL_EXAM_MAX);
   const totalScore = Math.round((yearWorkScore + finalExamScore) * 10) / 10;
 
@@ -52,6 +54,8 @@ export function computeStudentScoreSummary(
     classId,
     totalSessionsCount,
     attendedSessionsCount,
+    gradedSessionsCount,
+    isCalculated,
     yearWorkScore,
     finalExamScore,
     totalScore,

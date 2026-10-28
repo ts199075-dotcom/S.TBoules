@@ -66,9 +66,9 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
     if (!currentUser) return;
     setIsScanning(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       setIsScanning(false);
-      const res = recordQrAttendance(currentUser.id, session.id);
+      const res = await recordQrAttendance(currentUser.id, session.id);
       if (res.success) {
         setScanSuccessMsg(res.message);
         try {

@@ -29,8 +29,8 @@ export async function apiHealth(): Promise<boolean> {
   try {
     const res = await fetch('/api/health', { method: 'GET' });
     if (!res.ok) return false;
-    const data = await res.json();
-    return Boolean(data?.ok);
+    const data = await res.json().catch(() => ({}));
+    return Boolean(data?.ok || data?.status === 'ok' || data?.success);
   } catch {
     return false;
   }

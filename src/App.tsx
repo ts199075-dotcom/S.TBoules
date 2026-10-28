@@ -28,22 +28,48 @@ const MainAppContent: React.FC = () => {
     if (classId) setAdminClassId(classId);
   };
 
+  const prevUserIdRef = React.useRef<string | null>(null);
+
   useEffect(() => {
     if (!currentUser) {
+      prevUserIdRef.current = null;
       if (currentTab === 'admin' || currentTab === 'student' || currentTab === 'servant') {
         setCurrentTab('home');
       }
       return;
     }
 
-    if (currentUser.role === 'admin') {
-      if (currentTab === 'student' || currentTab === 'servant') setCurrentTab('admin');
-    } else if (currentUser.role === 'servant') {
-      if (currentTab === 'admin' || currentTab === 'student') setCurrentTab('servant');
-    } else if (currentUser.role === 'student') {
-      if (currentTab === 'admin' || currentTab === 'servant') setCurrentTab('student');
+    const isNewLogin = prevUserIdRef.current !== currentUser.id;
+    prevUserIdRef.current = currentUser.id;
+
+    if (isNewLogin) {
+      if (currentUser.role === 'admin') {
+        setCurrentTab('admin');
+      } else if (currentUser.role === 'servant' || currentUser.role === 'assistant') {
+        setCurrentTab('servant');
+      } else if (currentUser.role === 'student') {
+        setCurrentTab('student');
+      }
+    } else {
+      if (currentUser.role === 'admin') {
+        if (currentTab === 'student' || currentTab === 'servant') setCurrentTab('admin');
+      } else if (currentUser.role === 'servant' || currentUser.role === 'assistant') {
+        if (currentTab === 'admin' || currentTab === 'student') setCurrentTab('servant');
+      } else if (currentUser.role === 'student') {
+        if (currentTab === 'admin' || currentTab === 'servant') setCurrentTab('student');
+      }
     }
   }, [currentUser?.id, currentUser?.role]);
+
+  const handleLoginSuccess = (role: string) => {
+    if (role === 'admin') {
+      setCurrentTab('admin');
+    } else if (role === 'servant' || role === 'assistant') {
+      setCurrentTab('servant');
+    } else if (role === 'student') {
+      setCurrentTab('student');
+    }
+  };
 
   const handleOpenAuth = (mode: 'login' | 'register' = 'register') => {
     setAuthModalMode(mode);
@@ -172,6 +198,7 @@ const MainAppContent: React.FC = () => {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         initialMode={authModalMode}
+        onLoginSuccess={handleLoginSuccess}
       />
       <FeaturesGuideModal isOpen={featuresOpen} onClose={() => setFeaturesOpen(false)} />
     </div>

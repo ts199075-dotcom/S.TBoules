@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
-import { BibleSession } from '../types';
+import { BibleSession, SessionGrade } from '../types';
 
 export const StudentDashboard: React.FC = () => {
   const {
@@ -125,7 +125,7 @@ export const StudentDashboard: React.FC = () => {
   let totalLostPrayer = 0;
   let totalLostTools = 0;
 
-  studentGrades.forEach((g) => {
+  studentGrades.forEach((g: SessionGrade) => {
     totalLostExam += 10 - Number(g.exam || 0);
     totalLostHomework += 10 - Number(g.homework || 0);
     totalLostAttendance += 1 - Number(g.attendance || 0);
@@ -421,7 +421,7 @@ export const StudentDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {studentGrades.map((g) => {
+                {studentGrades.map((g: SessionGrade) => {
                   const sessionTotal =
                     Number(g.exam || 0) +
                     Number(g.homework || 0) +
@@ -551,7 +551,10 @@ export const StudentDashboard: React.FC = () => {
         <CertificateModal
           studentName={currentUser.name}
           className={classObj.name}
+          yearWorkScore={summary.yearWorkScore}
           totalScore={summary.totalScore}
+          gradedSessionsCount={summary.gradedSessionsCount}
+          isCalculated={summary.isCalculated}
           rank={currentRank}
           onClose={() => setShowCertificate(false)}
         />

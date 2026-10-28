@@ -10,14 +10,16 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'register';
+  onLoginSuccess?: (role: string) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   initialMode = 'login',
+  onLoginSuccess,
 }) => {
-  const { classes, registerUser, login, switchUserById } = useApp();
+  const { users, classes, registerUser, login, switchUserById } = useApp();
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [role, setRole] = useState<UserRole>('student');
@@ -35,11 +37,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loginPassword, setLoginPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setMode(initialMode);
+  const resetAllFields = () => {
+    setName('');
+    setEmail('');
+    setPassword('');
+    setPhone('');
+    setAge(14);
+    setGuardianPhone('');
+    setConfessionFather('');
+    setClassId('prep_2_3');
+    setLoginIdentifier('');
+    setLoginPassword('');
     setErrorMsg('');
     setSuccessPendingUser(null);
+  };
+
+  const handleClose = () => {
+    resetAllFields();
+    onClose();
+  };
+
+  useEffect(() => {
+    setMode(initialMode);
+    resetAllFields();
     setSubmitting(false);
   }, [isOpen, initialMode]);
 
@@ -82,8 +102,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           guardianPhone: role === 'student' ? guardianPhone.trim() : undefined,
           confessionFather: confessionFather.trim() || undefined,
         });
-        setSuccessPendingUser(newUser.name);
+        const registeredName = newUser.name;
+        resetAllFields();
+        setSuccessPendingUser(registeredName);
         switchUserById(newUser.id);
+        if (onLoginSuccess && newUser.role) {
+          onLoginSuccess(newUser.role);
+        }
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : 'تعذر إرسال الطلب.');
       } finally {
@@ -96,6 +121,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
     setSubmitting(true);
+    const idToLookup = loginIdentifier.trim().toLowerCase();
+
     void (async () => {
       const result = await login(loginIdentifier, loginPassword);
       setSubmitting(false);
@@ -103,12 +130,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorMsg(result.message);
         return;
       }
+      const loggedUser = users.find(
+        (u) =>
+          (u.email && u.email.toLowerCase() === idToLookup) ||
+          u.phone === loginIdentifier.trim() ||
+          u.name.toLowerCase() === idToLookup
+      );
+      const role = loggedUser?.role || 'admin';
+      resetAllFields();
+      if (onLoginSuccess) {
+        onLoginSuccess(role);
+      }
       onClose();
     })();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} titleId="auth-title" panelClassName="w-full max-w-lg">
+    <Modal isOpen={isOpen} onClose={handleClose} titleId="auth-title" panelClassName="w-full max-w-lg">
       <div className="bg-stone-900 p-4 text-white flex items-center justify-between border-b border-stone-800">
         <div className="flex items-center gap-2.5">
           <BrandMark size="sm" className="rounded-full" />
@@ -121,7 +159,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           className="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 flex items-center justify-center text-stone-300"
           aria-label="إغلاق نافذة الدخول"
         >
@@ -140,7 +178,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed">
             حسابك الآن <strong className="text-amber-800 dark:text-amber-400">قيد المراجعة</strong>. لن تُفتح لوحة الفصل إلا بعد اعتماد أمين الخدمة.
           </p>
-          <button type="button" onClick={onClose} className="btn-secondary">
+          <button type="button" onClick={handleClose} className="btn-secondary">
             حسناً
           </button>
         </div>
@@ -153,7 +191,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               aria-selected={mode === 'login'}
               onClick={() => {
                 setMode('login');
-                setErrorMsg('');
+                resetAllFields();
               }}
               className={`flex-1 py-3 text-xs font-bold border-b-2 flex items-center justify-center gap-1.5 ${
                 mode === 'login'
@@ -170,7 +208,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               aria-selected={mode === 'register'}
               onClick={() => {
                 setMode('register');
-                setErrorMsg('');
+                resetAllFields();
               }}
               className={`flex-1 py-3 text-xs font-bold border-b-2 flex items-center justify-center gap-1.5 ${
                 mode === 'register'
@@ -227,13 +265,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label htmlFor="reg-name" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     الاسم الرباعي <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-name" className="input-field" required value={name} onChange={(e) => setName(e.target.value)} />
+                  <input id="reg-name" autoComplete="off" className="input-field" required value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
                 <div>
                   <label htmlFor="reg-email" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     البريد الإلكتروني (اختياري)
                   </label>
-                  <input id="reg-email" type="email" className="input-field text-left font-mono" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input id="reg-email" type="email" autoComplete="off" className="input-field text-left font-mono" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
               </div>
 
@@ -242,7 +280,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label htmlFor="reg-phone" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     رقم الهاتف <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-phone" type="tel" className="input-field text-left font-mono" dir="ltr" required value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <input id="reg-phone" type="tel" autoComplete="off" className="input-field text-left font-mono" dir="ltr" required value={phone} onChange={(e) => setPhone(e.target.value)} />
                 </div>
                 <div>
                   <label htmlFor="reg-pass" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
@@ -257,21 +295,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label htmlFor="reg-age" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     السن <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-age" type="number" min={6} max={90} className="input-field" required value={age} onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))} />
+                  <input id="reg-age" type="number" min={6} max={90} autoComplete="off" className="input-field" required value={age} onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
                 {role === 'student' ? (
                   <div>
                     <label htmlFor="reg-guardian" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                       هاتف ولي الأمر
                     </label>
-                    <input id="reg-guardian" type="tel" className="input-field text-left font-mono" dir="ltr" value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} />
+                    <input id="reg-guardian" type="tel" autoComplete="off" className="input-field text-left font-mono" dir="ltr" value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} />
                   </div>
                 ) : (
                   <div>
                     <label htmlFor="reg-father" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                       أب الاعتراف
                     </label>
-                    <input id="reg-father" className="input-field" value={confessionFather} onChange={(e) => setConfessionFather(e.target.value)} />
+                    <input id="reg-father" autoComplete="off" className="input-field" value={confessionFather} onChange={(e) => setConfessionFather(e.target.value)} />
                   </div>
                 )}
               </div>
@@ -330,7 +368,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="input-field text-left font-mono ps-8"
                     dir="ltr"
                     required
-                    autoComplete="username"
+                    autoComplete="off"
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
                   />
@@ -345,7 +383,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     id="login-pass"
                     type="password"
-                    autoComplete="current-password"
+                    autoComplete="off"
                     className="input-field text-left font-mono ps-8"
                     dir="ltr"
                     required

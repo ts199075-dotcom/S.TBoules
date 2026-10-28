@@ -80,6 +80,12 @@ interface AppContextType {
   getStudentScoreSummary: (studentId: string) => StudentScoreSummary;
   getClassLeaderboard: (classId: ClassId) => StudentScoreSummary[];
   getStudentSessionGrades: (studentId: string) => SessionGrade[];
+  addStudentByAdmin: (studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => Promise<UserProfile>;
+  changeStudentClass: (studentId: string, newClassId: ClassId) => void;
+  updateServantProfile: (servantId: string, updates: { role?: UserProfile['role']; classId?: ClassId }) => void;
+  yearWorkApprovedClasses: Record<string, boolean>;
+  calculateAndLockYearWork: (classId: ClassId) => void;
+  unlockYearWorkCalculation: (classId: ClassId) => void;
   markNotificationAsRead: (id: string) => void;
   clearNotifications: () => void;
   resetDemoData: () => void;
@@ -135,33 +141,51 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     readStoredJson(STORAGE_KEYS.POSTS, INITIAL_LESSON_POSTS)
   );
 
-  const applyRemote = useCallback((payload: RemoteState) => {
-    if (payload.users) setUsers(payload.users);
-    if (payload.sessions) setSessions(payload.sessions);
-    if (payload.grades) setGrades(payload.grades);
-    if (payload.finalExamScores) setFinalExamScores(payload.finalExamScores);
-    if (payload.servantSubmissions) setServantSubmissions(payload.servantSubmissions);
-    if (payload.notifications) setNotifications(payload.notifications);
-    if (payload.lessonPosts) setLessonPosts(payload.lessonPosts);
-    if ('currentUser' in payload) setCurrentUserId(payload.currentUser?.id || '');
+  const [yearWorkApprovedClasses, setYearWorkApprovedClasses] = useState<Record<string, boolean>>({});
+
+  const applyRemote = useCallback((payload: any) => {
+    if (!payload) return;
+    const state = payload?.data || payload;
+    if (state.currentUser && state.currentUser.id) {
+      setCurrentUserId(state.currentUser.id);
+    }
+    if (Array.isArray(state.users)) setUsers(state.users);
+    if (Array.isArray(state.sessions)) setSessions(state.sessions);
+    if (Array.isArray(state.grades)) setGrades(state.grades);
+    if (state.finalExamScores && typeof state.finalExamScores === 'object') setFinalExamScores(state.finalExamScores);
+    if (Array.isArray(state.servantSubmissions)) setServantSubmissions(state.servantSubmissions);
+    if (Array.isArray(state.notifications)) setNotifications(state.notifications);
+    if (Array.isArray(state.lessonPosts)) setLessonPosts(state.lessonPosts);
+    if (state.yearWorkApprovedClasses && typeof state.yearWorkApprovedClasses === 'object') {
+      setYearWorkApprovedClasses(state.yearWorkApprovedClasses);
+    }
   }, []);
 
+  // Periodic Polling: checks server every 3 seconds so ANY device update reflects immediately on all other devices!
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const ok = await apiHealth();
-      if (cancelled) return;
-      setBackendStatus(ok ? 'online' : 'offline');
-      if (!ok) return;
+    let timer: any = null;
+
+    const syncState = async () => {
       try {
-        const data = await apiRequest<RemoteState>('/api/state');
-        if (!cancelled) applyRemote(data);
+        const ok = await apiHealth();
+        if (cancelled) return;
+        setBackendStatus(ok ? 'online' : 'offline');
+        if (ok) {
+          const data = await apiRequest<any>('/api/state');
+          if (!cancelled && data) applyRemote(data);
+        }
       } catch {
-        if (getApiToken()) setApiToken('');
+        if (!cancelled) setBackendStatus('offline');
       }
-    })();
+    };
+
+    void syncState();
+    timer = setInterval(syncState, 3000);
+
     return () => {
       cancelled = true;
+      if (timer) clearInterval(timer);
     };
   }, [applyRemote]);
 
@@ -221,10 +245,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const login = async (identifier: string, password: string) => {
     if (backendStatus === 'online') {
       try {
-        await remote('/api/auth/login', {
+        const data = await remote('/api/auth/login', {
           method: 'POST',
           body: JSON.stringify({ identifier, password }),
         });
+        const authedUser = (data as any)?.user || (data as any)?.currentUser;
+        if (authedUser?.id) {
+          setCurrentUserId(authedUser.id);
+          try {
+            localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, authedUser.id);
+          } catch {
+            /* ignore */
+          }
+        }
         return { success: true, message: 'تم تسجيل الدخول.' };
       } catch (err) {
         return { success: false, message: err instanceof ApiError ? err.message : 'تعذر تسجيل الدخول.' };
@@ -246,6 +279,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const expectedPassword = found.password || found.phone;
     if (expectedPassword !== passTrim) return { success: false, message: 'كلمة المرور غير صحيحة.' };
     setCurrentUserId(found.id);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, found.id);
+    } catch {
+      /* ignore */
+    }
     return { success: true, message: 'تم تسجيل الدخول.' };
   };
 
@@ -255,6 +293,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setApiToken('');
     }
     setCurrentUserId('');
+    try {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+      sessionStorage.clear();
+    } catch {
+      /* ignore */
+    }
   };
 
   const registerUser = async (data: Omit<UserProfile, 'id' | 'status' | 'registeredAt'>) => {
@@ -263,7 +307,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         method: 'POST',
         body: JSON.stringify(data),
       });
-      return (payload.currentUser as UserProfile) || users[0];
+      const registeredUser = (payload as any)?.user || (payload as any)?.currentUser;
+      if (registeredUser?.id) {
+        setCurrentUserId(registeredUser.id);
+        try {
+          localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, registeredUser.id);
+        } catch {
+          /* ignore */
+        }
+      }
+      return (registeredUser as UserProfile) || users[0];
     }
 
     const phoneTaken = users.some((u) => u.phone === data.phone.trim());
@@ -326,6 +379,77 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+  };
+
+  const addStudentByAdmin = async (studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => {
+    const newStudent: UserProfile = {
+      ...studentData,
+      id: `stud-${Date.now()}`,
+      status: 'active',
+      role: 'student',
+      registeredAt: new Date().toISOString().split('T')[0],
+    };
+    if (backendStatus === 'online') {
+      void remote('/api/users/action', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'addStudent', student: studentData }),
+      });
+      return newStudent;
+    }
+    setUsers((prev) => [newStudent, ...prev]);
+    return newStudent;
+  };
+
+  const changeStudentClass = (studentId: string, newClassId: ClassId) => {
+    if (backendStatus === 'online') {
+      void remote('/api/users/action', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'changeClass', userId: studentId, newClassId }),
+      });
+      return;
+    }
+    setUsers((prev) => prev.map((u) => (u.id === studentId ? { ...u, classId: newClassId } : u)));
+  };
+
+  const updateServantProfile = (servantId: string, updates: { role?: UserProfile['role']; classId?: ClassId }) => {
+    if (backendStatus === 'online') {
+      void remote('/api/users/action', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'updateServant', userId: servantId, ...updates }),
+      });
+      return;
+    }
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === servantId
+          ? {
+              ...u,
+              role: updates.role || u.role,
+              classId: updates.classId !== undefined ? updates.classId : u.classId,
+            }
+          : u
+      )
+    );
+  };
+
+  const calculateAndLockYearWork = (classId: ClassId) => {
+    setYearWorkApprovedClasses((prev) => ({ ...prev, [classId]: true }));
+    if (backendStatus === 'online') {
+      void remote('/api/year-work-lock', {
+        method: 'POST',
+        body: JSON.stringify({ classId, locked: true }),
+      });
+    }
+  };
+
+  const unlockYearWorkCalculation = (classId: ClassId) => {
+    setYearWorkApprovedClasses((prev) => ({ ...prev, [classId]: false }));
+    if (backendStatus === 'online') {
+      void remote('/api/year-work-lock', {
+        method: 'POST',
+        body: JSON.stringify({ classId, locked: false }),
+      });
+    }
   };
 
   const saveSessionGrade = (gradeData: Partial<SessionGrade> & { studentId: string; sessionId: string }) => {
@@ -642,6 +766,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getStudentScoreSummary,
         getClassLeaderboard,
         getStudentSessionGrades,
+        addStudentByAdmin,
+        changeStudentClass,
+        updateServantProfile,
+        yearWorkApprovedClasses,
+        calculateAndLockYearWork,
+        unlockYearWorkCalculation,
         markNotificationAsRead,
         clearNotifications,
         resetDemoData,

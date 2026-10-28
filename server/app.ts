@@ -528,7 +528,7 @@ export function createApiApp() {
   });
 
   app.post('/api/servant/check-in', requireAuth, requireRoles(['servant', 'assistant', 'admin']), async (req: AuthedRequest, res) => {
-    const status = req.body?.status === 'absent' ? 'absent' : 'attending';
+    const status: 'absent' | 'attending' = req.body?.status === 'absent' ? 'absent' : 'attending';
     const result = await withDb((db) => {
       const currentUser = db.users.find((u) => u.id === req.user!.id)!;
       const newSub = {
