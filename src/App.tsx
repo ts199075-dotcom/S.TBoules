@@ -95,7 +95,7 @@ const MainAppContent: React.FC = () => {
       </a>
 
       <div
-        className="fixed inset-0 pointer-events-none z-0 bg-cover bg-center bg-no-repeat opacity-[0.05] dark:opacity-[0.08]"
+        className="fixed inset-0 pointer-events-none z-0 bg-cover bg-center bg-no-repeat opacity-[0.16] dark:opacity-[0.20]"
         style={{ backgroundImage: `url('${SAINT_PAUL_ICON}')` }}
         aria-hidden="true"
       />

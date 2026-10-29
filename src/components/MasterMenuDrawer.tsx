@@ -288,19 +288,8 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
               </div>
             </div>
 
-            {/* 4. PLATFORM FEATURES GUIDE & TOOLS */}
+            {/* 4. TOOLS & QUICK CONTROLS */}
             <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-stone-800">
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenFeatures();
-                }}
-                className="w-full p-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-transform hover:scale-[1.01]"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>📋 دليل كافة مميزات المنصة (شرح تفصيلي)</span>
-              </button>
-
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   onClick={toggleTheme}

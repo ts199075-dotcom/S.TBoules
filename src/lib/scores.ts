@@ -33,18 +33,24 @@ export function computeStudentScoreSummary(
   const studentGrades = grades.filter((g) => g.studentId === studentId);
   const totalSessionsCount = classSessions.length;
 
-  let yearWorkScore = 0;
-  if (totalSessionsCount > 0) {
-    const sum = classSessions.reduce((acc, sess) => {
-      const g = studentGrades.find((row) => row.sessionId === sess.id);
-      return acc + (g ? sessionTotal(g) : 0);
-    }, 0);
-    yearWorkScore = Math.round((sum / totalSessionsCount / SESSION_MAX) * YEAR_WORK_MAX * 10) / 10;
-  }
-
+  // Cumulative sum of points earned across all graded sessions so far
+  const cumulativeEarnedSum = studentGrades.reduce((acc, g) => acc + sessionTotal(g), 0);
   const attendedSessionsCount = studentGrades.filter((g) => Number(g.attendance || 0) >= 1).length;
   const gradedSessionsCount = studentGrades.length;
   const isCalculated = gradedSessionsCount >= 8;
+
+  let yearWorkScore = 0;
+  if (isCalculated) {
+    // When 8 or more sessions are completed: compute scaled average out of 60
+    yearWorkScore = Math.min(
+      YEAR_WORK_MAX,
+      Math.round((cumulativeEarnedSum / (gradedSessionsCount * SESSION_MAX)) * YEAR_WORK_MAX * 10) / 10
+    );
+  } else {
+    // Before 8 sessions: raw cumulative sum of earned points (e.g. 24 + 24 = 48)
+    yearWorkScore = Math.round(cumulativeEarnedSum * 10) / 10;
+  }
+
   const finalExamScore = clamp(finalExamScores[studentId] ?? 0, 0, FINAL_EXAM_MAX);
   const totalScore = Math.round((yearWorkScore + finalExamScore) * 10) / 10;
 

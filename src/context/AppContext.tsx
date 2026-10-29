@@ -586,10 +586,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     prepNotes?: string;
   }) => {
     if (!currentUser) return;
-    if (backendStatus === 'online') {
-      void remote('/api/servant/check-in', { method: 'POST', body: JSON.stringify(data) });
-      return;
-    }
     const newSub: ServantAttendanceSubmission = {
       id: `sub-${Date.now()}`,
       servantId: currentUser.id,
@@ -607,7 +603,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       submittedAt: new Date().toLocaleString('ar-EG'),
       viewedByAdmin: false,
     };
+    if (backendStatus === 'online') {
+      void remote('/api/servant/check-in', {
+        method: 'POST',
+        body: JSON.stringify({ ...newSub, classId: currentUser.classId }),
+      });
+      return;
+    }
     setServantSubmissions((prev) => [newSub, ...prev.filter((s) => s.servantId !== currentUser.id)]);
+    if (data.status === 'attending' && (data.prepTitle || data.prepAttachmentName)) {
+      const localPost: ServantLessonPost = {
+        id: `post-prep-${Date.now()}`,
+        servantId: currentUser.id,
+        servantName: currentUser.name,
+        classId: currentUser.classId || 'prep_2_3',
+        title: data.prepTitle || 'مذكرة تحضير الدرس الأسبوعي',
+        category: 'lesson_handout',
+        bibleVerse: data.prepBibleVerse || '',
+        content: data.prepNotes || `قام الخادم ${currentUser.name} برفع ملف تحضير درس.`,
+        attachmentName: data.prepAttachmentName,
+        createdAt: new Date().toISOString().split('T')[0],
+        status: 'pending_approval',
+      };
+      setLessonPosts((prev) => [localPost, ...prev]);
+    }
   };
 
   const createLessonPost = (postData: {
@@ -619,10 +638,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     classId: ClassId;
   }) => {
     if (!currentUser) return;
-    if (backendStatus === 'online') {
-      void remote('/api/posts', { method: 'POST', body: JSON.stringify(postData) });
-      return;
-    }
     const newPost: ServantLessonPost = {
       id: `post-${Date.now()}`,
       servantId: currentUser.id,
@@ -638,6 +653,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       approvedBy: currentUser.role === 'admin' ? currentUser.name : undefined,
       approvedAt: currentUser.role === 'admin' ? new Date().toISOString().split('T')[0] : undefined,
     };
+    if (backendStatus === 'online') {
+      void remote('/api/posts', { method: 'POST', body: JSON.stringify({ action: 'create', post: newPost, ...newPost }) });
+      return;
+    }
     setLessonPosts((prev) => [newPost, ...prev]);
   };
 

@@ -58,6 +58,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     <div className="space-y-16 pb-20 text-stone-900 dark:text-stone-100">
       {/* Calm & Reverent Hero Section */}
       <section className="relative overflow-hidden bg-stone-900 text-stone-100 pt-14 pb-20 px-4 sm:px-6 rounded-b-[2rem] border-b border-stone-800">
+        {/* Saint Paul Hero Background Watermark - Clearly visible */}
+        <div
+          className="absolute inset-0 pointer-events-none bg-contain bg-center bg-no-repeat opacity-25 dark:opacity-30 scale-125"
+          style={{ backgroundImage: `url('/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg')` }}
+          aria-hidden="true"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-stone-900/60 via-stone-900/75 to-stone-900/90 pointer-events-none" />
+
         <div className="max-w-4xl mx-auto relative z-10 text-center space-y-6">
           {/* Saint Paul Icon Avatar Display */}
           <div className="flex justify-center">

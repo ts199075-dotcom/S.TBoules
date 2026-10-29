@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ClassId, SessionGrade, UserProfile, BibleSession, ServantLessonPost } from '../types';
+import { sessionTotal } from '../lib/scores';
 import {
   Shield,
   Users,
@@ -184,6 +185,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     rank?: number;
   } | null>(null);
 
+  // Detailed Student Profile Modal
+  const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<UserProfile | null>(null);
+
   // Pending users and pending posts counts
   const pendingUsers = users.filter((u) => u.status === 'pending');
   const pendingPosts = lessonPosts.filter((p) => p.status === 'pending_approval');
@@ -197,6 +201,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const totalServants = users.filter((u) => u.role === 'servant' || u.role === 'assistant');
   const activeServants = totalServants.filter((u) => u.status === 'active');
   const attendedServants = servantSubmissions.filter((s) => s.status === 'attending');
+
+  const navigateToTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      document.getElementById('admin-tabs-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
 
   const handleOpenGrading = (student: UserProfile, sessionId?: string) => {
     setSelectedStudentForGrading(student);
@@ -364,7 +375,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Students Card */}
         <div
-          onClick={() => setActiveTab('students')}
+          onClick={() => navigateToTab('students')}
           className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-xs hover:border-amber-500/50 hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
@@ -388,7 +399,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Total Servants Card */}
         <div
-          onClick={() => setActiveTab('servants')}
+          onClick={() => navigateToTab('servants')}
           className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-xs hover:border-amber-500/50 hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
@@ -409,7 +420,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* 7 Classes Card */}
         <div
-          onClick={() => setActiveTab('classes')}
+          onClick={() => navigateToTab('classes')}
           className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-xs hover:border-amber-500/50 hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
@@ -430,7 +441,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Pending Requests & Approvals Card */}
         <div
-          onClick={() => setActiveTab('pending')}
+          onClick={() => navigateToTab('pending')}
           className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-xs hover:border-amber-500/50 hover:shadow-md transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-3">
@@ -451,35 +462,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* 2. The 7-Class Visual Horizontal Ribbon - Direct Class Quick-Access */}
+      {/* 2. The 7-Class Visual Horizontal Ribbon */}
       <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-stone-100 dark:border-stone-800 pb-2.5">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-amber-600" />
             <h3 className="font-bold text-xs sm:text-sm text-stone-900 dark:text-stone-100">
-              توزيع الطلاب وإحصائيات الفصول السبعة (اضغط على أي فصل لفتحه مباشرة):
+              الفصول الدراسية المعتمدة (اضغط على أي فصل لفتحه مباشرة):
             </h3>
           </div>
-          <div className="flex items-center gap-2 text-xs">
-            {totalStudents.length === 0 ? (
-              <button
-                onClick={seedDemoData}
-                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-[11px] flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
-                title="شحن ١٤ طالب و ٢ خدام لتجربة رصد الدرجات فوراً"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>⚡ شحن طلاب وخدام تجريبيين للفصول</span>
-              </button>
-            ) : (
-              <button
-                onClick={clearAllStudentsAndServants}
-                className="px-2.5 py-1 rounded-lg border border-stone-200 dark:border-stone-700 text-stone-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
-                title="تفريغ كافة الطلاب والخدام والعودة للحساب الخالي"
-              >
-                <Trash2 className="w-3 h-3" />
-                <span>تفريغ الطلاب للاختبار الحر</span>
-              </button>
-            )}
+          <div className="text-xs text-stone-500 font-medium">
+            مدرسة القديس بولس الرسول • ٧ فصول كاملة
           </div>
         </div>
 
@@ -493,7 +486,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 key={cls.id}
                 onClick={() => {
                   setSelectedClassId(cls.id);
-                  setActiveTab('classes');
+                  navigateToTab('classes');
                 }}
                 className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between ${
                   isSelected
@@ -518,7 +511,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+      <div id="admin-tabs-section" className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
         <button
           onClick={() => setActiveTab('students')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
@@ -552,7 +545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          <span>سيكشن الفصول والطلاب والدرجات (٧ فصول)</span>
+          <span>الفصول (٧ فصول دراسية)</span>
         </button>
 
         <button
@@ -638,6 +631,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           approveUser={approveUser}
           onOpenGrading={handleOpenGrading}
           onOpenCertificate={handleOpenCertificate}
+          onSelectStudentProfile={setSelectedStudentForProfile}
           yearWorkApprovedClasses={yearWorkApprovedClasses}
         />
       )}
@@ -751,9 +745,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 bg-slate-50/80 dark:bg-slate-800/80">
                       <th className="py-3 px-3 font-bold">اسم الطالب</th>
                       <th className="py-3 px-3 font-bold">رقم الهاتف وولي الأمر</th>
-                      <th className="py-3 px-2 text-center font-bold">أعمال السنة (٦٠)</th>
-                      <th className="py-3 px-2 text-center font-bold">الامتحان النهائي (٤٠)</th>
-                      <th className="py-3 px-3 text-center font-black text-amber-900 dark:text-amber-300">المجموع الكلي (١٠٠)</th>
+                      <th className="py-3 px-2 text-center font-bold">أعمال السنة (60)</th>
+                      <th className="py-3 px-2 text-center font-bold">الامتحان النهائي (40)</th>
+                      <th className="py-3 px-3 text-center font-black text-amber-900 dark:text-amber-300">المجموع الكلي (100)</th>
                       <th className="py-3 px-3 text-center font-bold">الإجراءات ورصد الدرجات</th>
                     </tr>
                   </thead>
@@ -769,7 +763,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 flex items-center justify-center font-bold text-[11px]">
                                   {student.name.slice(0, 1)}
                                 </div>
-                                <span>{student.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStudentForProfile(student)}
+                                  className="text-right hover:text-amber-600 dark:hover:text-amber-400 hover:underline font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                                  title="اضغط لفتح صفحة ملف الطالب الشاملة وبياناته ودرجاته"
+                                >
+                                  <span>{student.name}</span>
+                                  <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded border border-amber-300/40">
+                                    الملف الشخصي ↗
+                                  </span>
+                                </button>
+                              </div>
+                              {/* Session Dates & Grades summary */}
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {getStudentSessionGrades(student.id).map((g) => (
+                                  <span
+                                    key={g.id}
+                                    className="inline-flex items-center gap-1 text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 font-mono"
+                                    title={`${g.sessionTitle} (${sessionTotal(g)} / 24)`}
+                                  >
+                                    📅 {g.date}: <strong className="text-amber-700 dark:text-amber-400">{sessionTotal(g)} / 24</strong>
+                                  </span>
+                                ))}
                               </div>
                             </td>
 
@@ -781,8 +797,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </td>
 
                             <td className="py-3 px-2 text-center">
-                              <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold">
-                                {summary.yearWorkScore} / ٦٠
+                              <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-[11px]">
+                                {summary.isCalculated
+                                  ? `${summary.yearWorkScore} / 60 معتمدة`
+                                  : `${summary.yearWorkScore} نقطة تراكمية (${summary.gradedSessionsCount} / 8)`}
                               </span>
                             </td>
 
@@ -795,13 +813,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 }}
                                 className="inline-block px-2.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-800 dark:text-indigo-300 font-bold cursor-pointer"
                               >
-                                {summary.finalExamScore} / ٤٠ ✏️
+                                {summary.finalExamScore} / 40 ✏️
                               </button>
                             </td>
 
                             <td className="py-3 px-3 text-center">
                               <span className="inline-block px-3 py-1 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-950 dark:text-amber-300 font-black text-xs">
-                                {summary.totalScore} / ١٠٠
+                                {summary.totalScore} / 100
                               </span>
                             </td>
 
@@ -1190,13 +1208,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          <div className="space-y-4">
+          {/* Section 1: تحضيرات الدروس ومذكرات الخدام الأسبوعية المرفوعة */}
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+              <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <FileCheck className="w-4 h-4 text-emerald-600" />
+                <span>تحضيرات الدروس الأسبوعية ومذكرات الخدام المرفوعة حديثاً ({servantSubmissions.length})</span>
+              </h4>
+              <span className="text-[11px] text-slate-500">
+                تسجيلات الحضور، عناوين الدروس، والمرفقات
+              </span>
+            </div>
+
+            {servantSubmissions.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+                لا توجد تحضيرات دروس مرفوعة من الخدام حتى الآن. فور رفع أي خادم لتحضير درسه أو ملفه سيظهر هنا في اللحظة نفسها.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {servantSubmissions.map((sub) => {
+                  const servantObj = users.find((u) => u.id === sub.servantId);
+                  const cls = classes.find((c) => c.id === (sub.classId || servantObj?.classId));
+
+                  return (
+                    <div
+                      key={sub.id}
+                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 space-y-2.5 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-200 dark:border-slate-700/80 pb-2">
+                        <div>
+                          <div className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                            {sub.servantName}
+                          </div>
+                          <div className="text-[11px] text-amber-800 dark:text-amber-400 font-semibold mt-0.5">
+                            {cls?.name || 'فصل غير محدد'} {sub.servantPhone && `• ${sub.servantPhone}`}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            sub.status === 'attending'
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                              : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'
+                          }`}
+                        >
+                          {sub.status === 'attending' ? 'حاضر بالتحضير ✅' : 'معتذر ❌'}
+                        </span>
+                      </div>
+
+                      {sub.prepTitle && (
+                        <div>
+                          <span className="text-slate-500 text-[10px] block">عنوان الدرس:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{sub.prepTitle}</span>
+                        </div>
+                      )}
+
+                      {sub.prepBibleVerse && (
+                        <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-300 italic text-[11px]">
+                          «{sub.prepBibleVerse}»
+                        </div>
+                      )}
+
+                      {sub.prepAttachmentName && (
+                        <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <FileText className="w-4 h-4 shrink-0 text-emerald-600" />
+                            <span className="truncate">ملف مرفق: {sub.prepAttachmentName}</span>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 shrink-0">
+                            مرفوع ومحفوظ ✅
+                          </span>
+                        </div>
+                      )}
+
+                      {sub.absenceReason && (
+                        <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 text-[11px]">
+                          <strong>سبب الاعتذار:</strong> {sub.absenceReason}
+                        </div>
+                      )}
+
+                      {sub.prepNotes && (
+                        <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                          {sub.prepNotes}
+                        </p>
+                      )}
+
+                      <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+                        <span>{sub.meetingTitle || 'الاجتماع الأسبوعي'}</span>
+                        <span>{sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString('ar-EG') : 'الآن'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section 2: المنشورات والمذكرات المعلقة للمراجعة والنشر */}
+          <div className="space-y-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <span>المنشورات والمذكرات الموجهة المعلقة للاعتماد والنشر للطلاب ({pendingPosts.length})</span>
+              </h4>
+              <span className="text-[11px] text-slate-500">
+                موافقة الأدمن تتيح المنشور فوراً لطلاب الفصل المستهدف
+              </span>
+            </div>
+
             {pendingPosts.length === 0 ? (
-              <div className="p-10 text-center space-y-2">
-                <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                  تمت مراجعة جميع منشورات الخدام، لا يوجد شيء معلق!
-                </h4>
+              <div className="p-8 text-center space-y-2 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                <h5 className="font-bold text-xs text-slate-700 dark:text-slate-300">
+                  تمت مراجعة جميع منشورات ومذكرات الخدام، لا يوجد شيء معلق!
+                </h5>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1350,21 +1475,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <tr className="border-b border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400">
                   <th className="py-2.5 px-3">الترتيب</th>
                   <th className="py-2.5 px-3">اسم الطالب</th>
-                  <th className="py-2.5 px-3 text-center">أعمال السنة (٦٠)</th>
-                  <th className="py-2.5 px-3 text-center">الامتحان النهائي (٤٠)</th>
-                  <th className="py-2.5 px-3 text-center font-bold">المجموع الكلي (١٠٠)</th>
+                  <th className="py-2.5 px-3 text-center">أعمال السنة (60)</th>
+                  <th className="py-2.5 px-3 text-center">الامتحان النهائي (40)</th>
+                  <th className="py-2.5 px-3 text-center font-bold">المجموع الكلي (100)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-                {getClassLeaderboard(selectedClassId).map((row, idx) => (
-                  <tr key={row.studentId}>
-                    <td className="py-2 px-3 font-bold">{idx + 1}</td>
-                    <td className="py-2 px-3 font-bold">{row.studentName}</td>
-                    <td className="py-2 px-3 text-center text-emerald-700 dark:text-emerald-400 font-bold">{row.yearWorkScore} / ٦٠</td>
-                    <td className="py-2 px-3 text-center text-indigo-700 dark:text-indigo-400 font-bold">{row.finalExamScore} / ٤٠</td>
-                    <td className="py-2 px-3 text-center font-black text-amber-800 dark:text-amber-300">{row.totalScore} / ١٠٠</td>
-                  </tr>
-                ))}
+                {getClassLeaderboard(selectedClassId).map((row, idx) => {
+                  const studentObj = users.find((u) => u.id === row.studentId);
+                  return (
+                    <tr key={row.studentId}>
+                      <td className="py-2 px-3 font-bold">{idx + 1}</td>
+                      <td className="py-2 px-3 font-bold">
+                        <button
+                          type="button"
+                          onClick={() => studentObj && setSelectedStudentForProfile(studentObj)}
+                          className="hover:text-amber-600 dark:hover:text-amber-400 hover:underline cursor-pointer text-right"
+                          title="عرض ملف الطالب الشامل ودرجاته"
+                        >
+                          {row.studentName}
+                        </button>
+                      </td>
+                      <td className="py-2 px-3 text-center text-emerald-700 dark:text-emerald-400 font-bold">{row.yearWorkScore} / 60</td>
+                      <td className="py-2 px-3 text-center text-indigo-700 dark:text-indigo-400 font-bold">{row.finalExamScore} / 40</td>
+                      <td className="py-2 px-3 text-center font-black text-amber-800 dark:text-amber-300">{row.totalScore} / 100</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1666,10 +1803,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     .filter((s) => s.classId === selectedStudentForGrading.classId)
                     .map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.title} ({s.date})
+                        {s.title} — 📅 تاريخ اللقاء: {s.date}
                       </option>
                     ))}
                 </select>
+
+                {(() => {
+                  const sObj = sessions.find((s) => s.id === selectedSessionForGrading);
+                  return sObj ? (
+                    <div className="mt-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between font-bold">
+                      <span>📅 تاريخ اللقاء المرصود: {sObj.date}</span>
+                      <span>الشاهد: {sObj.biblePassage}</span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
 
               <div className="bg-stone-50 dark:bg-stone-800/90 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 space-y-4">
@@ -2204,6 +2351,262 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Detailed Student Profile Modal (صفحة ملف الطالب الشاملة وبياناته ودرجاته) */}
+      {selectedStudentForProfile && (() => {
+        const student = selectedStudentForProfile;
+        const studentClass = classes.find((c) => c.id === student.classId);
+        const summary = getStudentScoreSummary(student.id);
+        const studentGrades = getStudentSessionGrades(student.id);
+        const classSessions = sessions.filter((s) => s.classId === student.classId);
+        const leaderboard = getClassLeaderboard(student.classId || 'prep_2_3');
+        const rank = leaderboard.findIndex((item) => item.studentId === student.id) + 1;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fade-in text-right">
+            <div
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
+              dir="rtl"
+            >
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 text-white p-5 sm:p-6 flex items-center justify-between gap-4 border-b border-amber-900/40 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400/30 text-amber-200 flex items-center justify-center font-bold text-lg">
+                    {student.name.slice(0, 1)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg sm:text-xl font-bold text-amber-50">
+                        {student.name}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 border border-amber-400/30 text-amber-200">
+                        {studentClass?.name || 'فصل غير محدد'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-100/70 mt-0.5">
+                      صفحة الطالب التفصيلية، كشف الدرجات الأسبوعية، الحضور بالـ QR، وأعمال السنة.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedStudentForProfile(null)}
+                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  title="إغلاق الملف"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs">
+                {/* 1. Personal & Church Info Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-slate-500 block text-[11px]">رقم هاتف الطالب</span>
+                    <strong className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono mt-0.5 block" dir="ltr">
+                      {student.phone}
+                    </strong>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-slate-500 block text-[11px]">هاتف ولي الأمر</span>
+                    <strong className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono mt-0.5 block" dir="ltr">
+                      {student.guardianPhone || 'غير مسجل'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-slate-500 block text-[11px]">السن وأب الاعتراف</span>
+                    <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-0.5 block">
+                      {student.age ? `${student.age} سنة` : 'السن غير محدد'} • {student.confessionFather || 'أبونا ميخائيل'}
+                    </strong>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80">
+                    <span className="text-slate-500 block text-[11px]">حالة الحساب والتسجيل</span>
+                    <strong className="text-xs font-bold text-emerald-700 dark:text-emerald-400 mt-0.5 block">
+                      {student.status === 'active' ? 'مفعل ومعتمد ✅' : 'قيد المراجعة ⏳'}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* 2. Academic Scores Summary (24 / 24, 60, 40, 100) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60">
+                    <span className="text-amber-800 dark:text-amber-300 font-bold block text-[11px]">
+                      المجموع الكلي النهائي
+                    </span>
+                    <div className="text-2xl font-black text-amber-950 dark:text-amber-100 mt-1">
+                      {summary.totalScore} <span className="text-xs font-bold text-amber-700 dark:text-amber-400">/ 100</span>
+                    </div>
+                    <span className="text-[10px] text-amber-700 dark:text-amber-400 block mt-0.5">
+                      أعمال السنة + النهائي
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60">
+                    <span className="text-emerald-800 dark:text-emerald-300 font-bold block text-[11px]">
+                      أعمال السنة الدورية
+                    </span>
+                    <div className="text-2xl font-black text-emerald-950 dark:text-emerald-100 mt-1">
+                      {summary.yearWorkScore} <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">/ {summary.isCalculated ? '60' : 'تراكمي'}</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block mt-0.5">
+                      {summary.isCalculated ? 'معتمدة من 60' : `مرصود ${summary.gradedSessionsCount} من 8 حصص`}
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60">
+                    <span className="text-indigo-800 dark:text-indigo-300 font-bold block text-[11px]">
+                      الامتحان النهائي الشامل
+                    </span>
+                    <div className="text-2xl font-black text-indigo-950 dark:text-indigo-100 mt-1">
+                      {summary.finalExamScore} <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400">/ 40</span>
+                    </div>
+                    <span className="text-[10px] text-indigo-700 dark:text-indigo-400 block mt-0.5">
+                      امتحان نهاية التيرم
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/60">
+                    <span className="text-purple-800 dark:text-purple-300 font-bold block text-[11px]">
+                      الترتيب على الفصل
+                    </span>
+                    <div className="text-2xl font-black text-purple-950 dark:text-purple-100 mt-1">
+                      {rank > 0 ? (rank === 1 ? '🥇 الأول' : rank === 2 ? '🥈 الثاني' : rank === 3 ? '🥉 الثالث' : `المركز ${rank}`) : '—'}
+                    </div>
+                    <span className="text-[10px] text-purple-700 dark:text-purple-400 block mt-0.5">
+                      من بين {leaderboard.length} طلاب
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Detailed Sessions Breakdown Table */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-amber-600" />
+                      <span>سجل درجات الحصص الأسبوعية (24 / 24 لكل حصة)</span>
+                    </h4>
+                    <span className="text-[11px] text-slate-500">
+                      مرصود: {studentGrades.length} من أصل {classSessions.length} لقاءات
+                    </span>
+                  </div>
+
+                  {studentGrades.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+                      لا توجد درجات مرصودة لهذا الطالب حتى الآن. يمكنك الضغط على «رصد وتعديل الدرجات» بالأسفل للبدء.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl">
+                      <table className="w-full text-right text-xs">
+                        <thead>
+                          <tr className="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold">
+                            <th className="py-2.5 px-3">#</th>
+                            <th className="py-2.5 px-3">عنوان اللقاء والتاريخ</th>
+                            <th className="py-2.5 px-2 text-center">الامتحان (10)</th>
+                            <th className="py-2.5 px-2 text-center">الواجب (10)</th>
+                            <th className="py-2.5 px-2 text-center">الحضور (1)</th>
+                            <th className="py-2.5 px-2 text-center">المشاركة (1)</th>
+                            <th className="py-2.5 px-2 text-center">الصلاة (1)</th>
+                            <th className="py-2.5 px-2 text-center">الأدوات (1)</th>
+                            <th className="py-2.5 px-3 text-center font-bold text-amber-900 dark:text-amber-300">المجموع (24)</th>
+                            <th className="py-2.5 px-3">ملاحظات</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {studentGrades.map((g, idx) => {
+                            const tot = sessionTotal(g);
+                            return (
+                              <tr key={g.id} className="hover:bg-amber-50/30 dark:hover:bg-slate-800/40">
+                                <td className="py-2.5 px-3 font-bold text-slate-400">{idx + 1}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-slate-100">
+                                  <div>{g.sessionTitle}</div>
+                                  <div className="text-[10px] text-slate-400 font-mono">📅 {g.date}</div>
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-bold">{g.exam} / 10</td>
+                                <td className="py-2.5 px-2 text-center font-bold">{g.homework} / 10</td>
+                                <td className="py-2.5 px-2 text-center">
+                                  {g.attendance === 1 ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      {g.qrAttendedAt ? `حاضر QR (${g.qrAttendedAt})` : 'حاضر (1 / 1)'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">0 / 1</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-2 text-center font-bold">{g.participation} / 1</td>
+                                <td className="py-2.5 px-2 text-center font-bold">{g.prayer} / 1</td>
+                                <td className="py-2.5 px-2 text-center font-bold">{g.tools} / 1</td>
+                                <td className="py-2.5 px-3 text-center font-black text-amber-800 dark:text-amber-300">
+                                  {tot} / 24
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                                  {g.notes || '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const st = selectedStudentForProfile;
+                      setSelectedStudentForProfile(null);
+                      if (st) handleOpenGrading(st);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Edit className="w-4 h-4" />
+                    <span>رصد وتعديل درجات الحصص</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const st = selectedStudentForProfile;
+                      setSelectedStudentForProfile(null);
+                      if (st) handleOpenFinalExam(st);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>تعديل درجة النهائي ({summary.finalExamScore} / 40)</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const st = selectedStudentForProfile;
+                      setSelectedStudentForProfile(null);
+                      if (st) handleOpenCertificate(st);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Award className="w-4 h-4" />
+                    <span>عرض شهادة التقدير</span>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setSelectedStudentForProfile(null)}
+                  className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

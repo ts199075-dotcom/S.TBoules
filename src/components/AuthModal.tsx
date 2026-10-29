@@ -265,13 +265,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label htmlFor="reg-name" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     الاسم الرباعي <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-name" autoComplete="off" className="input-field" required value={name} onChange={(e) => setName(e.target.value)} />
+                  <input
+                    id="reg-name"
+                    autoComplete="off"
+                    className="input-field"
+                    required
+                    placeholder="مثال: كيرلس ميخائيل عزيز"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label htmlFor="reg-email" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     البريد الإلكتروني (اختياري)
                   </label>
-                  <input id="reg-email" type="email" autoComplete="off" className="input-field text-left font-mono" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input
+                    id="reg-email"
+                    type="email"
+                    autoComplete="off"
+                    className="input-field text-left font-mono"
+                    dir="ltr"
+                    placeholder="example@mail.com (اختياري)"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
               </div>
 
@@ -280,13 +297,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label htmlFor="reg-phone" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     رقم الهاتف <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-phone" type="tel" autoComplete="off" className="input-field text-left font-mono" dir="ltr" required value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <input
+                    id="reg-phone"
+                    type="tel"
+                    autoComplete="off"
+                    className="input-field text-left font-mono"
+                    dir="ltr"
+                    required
+                    placeholder="01xxxxxxxxx"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label htmlFor="reg-pass" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     كلمة المرور <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-pass" type="password" autoComplete="new-password" className="input-field text-left font-mono" dir="ltr" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+                  <input
+                    id="reg-pass"
+                    type="password"
+                    autoComplete="new-password"
+                    className="input-field text-left font-mono"
+                    dir="ltr"
+                    required
+                    minLength={6}
+                    placeholder="اختر كلمة مرور قوية من ٦ خانات"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
                 </div>
               </div>
 
@@ -295,21 +333,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <label htmlFor="reg-age" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                     السن <span className="text-rose-500">*</span>
                   </label>
-                  <input id="reg-age" type="number" min={6} max={90} autoComplete="off" className="input-field" required value={age} onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))} />
+                  <input
+                    id="reg-age"
+                    type="number"
+                    min={6}
+                    max={90}
+                    autoComplete="off"
+                    className="input-field"
+                    required
+                    placeholder="مثال: 14"
+                    value={age}
+                    onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))}
+                  />
                 </div>
                 {role === 'student' ? (
                   <div>
                     <label htmlFor="reg-guardian" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                       هاتف ولي الأمر
                     </label>
-                    <input id="reg-guardian" type="tel" autoComplete="off" className="input-field text-left font-mono" dir="ltr" value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} />
+                    <input
+                      id="reg-guardian"
+                      type="tel"
+                      autoComplete="off"
+                      className="input-field text-left font-mono"
+                      dir="ltr"
+                      placeholder="رقم هاتف ولي الأمر (01xxxxxxxxx)"
+                      value={guardianPhone}
+                      onChange={(e) => setGuardianPhone(e.target.value)}
+                    />
                   </div>
                 ) : (
                   <div>
                     <label htmlFor="reg-father" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
                       أب الاعتراف
                     </label>
-                    <input id="reg-father" autoComplete="off" className="input-field" value={confessionFather} onChange={(e) => setConfessionFather(e.target.value)} />
+                    <input
+                      id="reg-father"
+                      autoComplete="off"
+                      className="input-field"
+                      placeholder="اسم أب الاعتراف (مثال: أبونا ميخائيل)"
+                      value={confessionFather}
+                      onChange={(e) => setConfessionFather(e.target.value)}
+                    />
                   </div>
                 )}
               </div>
@@ -369,6 +434,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     dir="ltr"
                     required
                     autoComplete="off"
+                    placeholder="ts199075@gmail.com أو رقم هاتفك"
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
                   />
@@ -387,6 +453,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="input-field text-left font-mono ps-8"
                     dir="ltr"
                     required
+                    placeholder="أدخل كلمة المرور الخاصة بحسابك"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                   />

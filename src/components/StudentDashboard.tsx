@@ -214,7 +214,7 @@ export const StudentDashboard: React.FC = () => {
           </div>
           <div className="flex items-baseline gap-1 mt-2">
             <span className="text-4xl font-black text-slate-900 dark:text-slate-100">{summary.totalScore}</span>
-            <span className="text-sm font-bold text-slate-400">/ ١٠٠</span>
+            <span className="text-sm font-bold text-slate-400">/ 100</span>
           </div>
           <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
             <div
@@ -223,7 +223,7 @@ export const StudentDashboard: React.FC = () => {
             />
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
-            أعمال السنة (٦٠) + الامتحان النهائي (٤٠)
+            أعمال السنة (60) + الامتحان النهائي (40)
           </p>
         </div>
 
@@ -237,12 +237,17 @@ export const StudentDashboard: React.FC = () => {
             {summary.isCalculated ? (
               <>
                 <span className="text-4xl font-black text-emerald-700 dark:text-emerald-400">{summary.yearWorkScore}</span>
-                <span className="text-sm font-bold text-slate-400">/ ٦٠</span>
+                <span className="text-sm font-bold text-slate-400">/ 60</span>
               </>
             ) : (
-              <span className="text-xl font-bold text-amber-700 dark:text-amber-400">
-                جارٍ الرصد ({summary.gradedSessionsCount}/٨)
-              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-amber-700 dark:text-amber-400">
+                  {summary.yearWorkScore}
+                </span>
+                <span className="text-xs font-bold text-slate-500">
+                  نقطة تراكمية ({summary.gradedSessionsCount} / 8 حصص)
+                </span>
+              </div>
             )}
           </div>
           <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
@@ -253,8 +258,8 @@ export const StudentDashboard: React.FC = () => {
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
             {summary.isCalculated
-              ? 'تم اعتماد واحتساب متوسط الـ ٨ حصص كاملة من ٦٠ درجة'
-              : 'بانتظار استيفاء رصد الـ ٨ حصص واعتماد المتوسط بأمر الإدارة'}
+              ? 'تم اعتماد واحتساب متوسط الـ 8 حصص كاملة من 60 درجة'
+              : 'بانتظار استيفاء رصد الـ 8 حصص واعتماد المتوسط بأمر الإدارة'}
           </p>
         </div>
 
@@ -266,7 +271,7 @@ export const StudentDashboard: React.FC = () => {
           </div>
           <div className="flex items-baseline gap-1 mt-2">
             <span className="text-4xl font-black text-indigo-700 dark:text-indigo-400">{summary.finalExamScore}</span>
-            <span className="text-sm font-bold text-slate-400">/ ٤٠</span>
+            <span className="text-sm font-bold text-slate-400">/ 40</span>
           </div>
           <div className="mt-3 w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
             <div
@@ -391,7 +396,7 @@ export const StudentDashboard: React.FC = () => {
               سجل درجات اللقاءات الأسبوعية وتأكيد حضور الـ QR
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              الامتحان (١٠) + الواجب (١٠) + الحضور (١) + المشاركة (١) + الصلاة (١) + الأدوات (١) = ٢٤ درجة لكل لقاء
+              الامتحان (10) + الواجب (10) + الحضور (1) + المشاركة (1) + الصلاة (1) + الأدوات (1) = 24 درجة لكل لقاء
             </p>
           </div>
 
@@ -410,13 +415,13 @@ export const StudentDashboard: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 bg-slate-50/80 dark:bg-slate-800/80">
                   <th className="py-3 px-3 font-bold">اللقاء وتاريخه</th>
-                  <th className="py-3 px-2 text-center font-bold">الامتحان (١٠)</th>
-                  <th className="py-3 px-2 text-center font-bold">الواجب (١٠)</th>
-                  <th className="py-3 px-2 text-center font-bold">الحضور (١)</th>
-                  <th className="py-3 px-2 text-center font-bold">المشاركة (١)</th>
-                  <th className="py-3 px-2 text-center font-bold">الصلاة (١)</th>
-                  <th className="py-3 px-2 text-center font-bold">الأدوات (١)</th>
-                  <th className="py-3 px-3 text-center font-black text-amber-900 dark:text-amber-300">مجموع اللقاء (٢٤)</th>
+                  <th className="py-3 px-2 text-center font-bold">الامتحان (10)</th>
+                  <th className="py-3 px-2 text-center font-bold">الواجب (10)</th>
+                  <th className="py-3 px-2 text-center font-bold">الحضور (1)</th>
+                  <th className="py-3 px-2 text-center font-bold">المشاركة (1)</th>
+                  <th className="py-3 px-2 text-center font-bold">الصلاة (1)</th>
+                  <th className="py-3 px-2 text-center font-bold">الأدوات (1)</th>
+                  <th className="py-3 px-3 text-center font-black text-amber-900 dark:text-amber-300">مجموع اللقاء (24)</th>
                   <th className="py-3 px-3 font-bold">ملاحظات الخادم</th>
                 </tr>
               </thead>
@@ -472,7 +477,7 @@ export const StudentDashboard: React.FC = () => {
 
                       <td className="py-3 px-3 text-center">
                         <span className="inline-block px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 font-black text-xs">
-                          {sessionTotal} / ٢٤
+                          {sessionTotal} / 24
                         </span>
                       </td>
 

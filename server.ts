@@ -436,12 +436,12 @@ app.post('/api/grades', (req: Request, res: Response) => {
         id: `grd-${Date.now()}`,
         studentId,
         sessionId,
-        attendance: 1,
+        attendance: 0,
         exam: 0,
         homework: 0,
-        participation: 1,
-        prayer: 1,
-        tools: 1,
+        participation: 0,
+        prayer: 0,
+        tools: 0,
         ...gradeData,
       });
     }
@@ -564,21 +564,25 @@ app.post('/api/servant-submissions', (req: Request, res: Response) => {
 // 10. Lesson Posts (Targeted per class or all)
 app.post('/api/posts', (req: Request, res: Response) => {
   try {
-    const { action, post, postId, reason, updated } = req.body;
+    const body = req.body || {};
+    const action = body.action || (body.title ? 'create' : undefined);
+    const postPayload = body.post || body;
+    const { postId, reason, updated } = body;
 
     if (action === 'create') {
       const newPost = {
-        ...post,
-        id: `post-${Date.now()}`,
-        createdAt: new Date().toISOString().split('T')[0],
+        ...postPayload,
+        id: postPayload.id || `post-${Date.now()}`,
+        status: postPayload.status || 'pending_approval',
+        createdAt: postPayload.createdAt || new Date().toISOString().split('T')[0],
       };
-      currentDB.lessonPosts = [newPost, ...currentDB.lessonPosts];
+      currentDB.lessonPosts = [newPost, ...currentDB.lessonPosts.filter((p) => p.id !== newPost.id)];
 
       currentDB.notifications = [
         {
           id: `notif-${Date.now()}`,
-          title: newPost.status === 'published' ? 'منشور دراسي جديد' : 'طلب اعتماد منشور لفصل',
-          message: `${newPost.authorName}: ${newPost.title}`,
+          title: newPost.status === 'approved' ? 'منشور دراسي معتمد ✅' : 'طلب اعتماد مذكرة / مسابقة من خادم ⏳',
+          message: `${newPost.servantName || 'خادم'}: ${newPost.title}`,
           timestamp: 'الآن',
           type: 'announcement',
           read: false,
@@ -587,7 +591,7 @@ app.post('/api/posts', (req: Request, res: Response) => {
       ];
     } else if (action === 'approve') {
       currentDB.lessonPosts = currentDB.lessonPosts.map((p) =>
-        p.id === postId ? { ...p, status: 'published' } : p
+        p.id === postId ? { ...p, status: 'approved' } : p
       );
     } else if (action === 'reject') {
       currentDB.lessonPosts = currentDB.lessonPosts.map((p) =>
@@ -692,15 +696,69 @@ app.post('/api/attendance/qr', (req: Request, res: Response) => {
   }
 });
 
-// Servant Check-In
+// Servant Check-In & Lesson Uploads
 app.post('/api/servant/check-in', (req: Request, res: Response) => {
   try {
+    const servantUser = currentDB.users.find(u => u.id === req.body.servantId);
     const submission = {
       ...req.body,
-      id: `sub-${Date.now()}`,
+      id: req.body.id || `sub-${Date.now()}`,
+      classId: req.body.classId || servantUser?.classId || 'prep_2_3',
       submittedAt: new Date().toISOString(),
     };
-    currentDB.servantSubmissions = [submission, ...currentDB.servantSubmissions];
+    currentDB.servantSubmissions = [
+      submission,
+      ...currentDB.servantSubmissions.filter((s) => s.id !== submission.id),
+    ];
+
+    // If servant uploaded a lesson prep or attachment, also create or update a lessonPost so it shows for admin approval & class feed
+    if (submission.status === 'attending' && (submission.prepTitle || submission.prepAttachmentName)) {
+      const existingPostIdx = currentDB.lessonPosts.findIndex(
+        (p) => p.servantId === submission.servantId && (p.title === submission.prepTitle || p.attachmentName === submission.prepAttachmentName)
+      );
+
+      const prepPost = {
+        id: existingPostIdx >= 0 ? currentDB.lessonPosts[existingPostIdx].id : `post-prep-${Date.now()}`,
+        servantId: submission.servantId,
+        servantName: submission.servantName || servantUser?.name || 'خادم',
+        classId: submission.classId || servantUser?.classId || 'prep_2_3',
+        title: submission.prepTitle || 'مذكرة / تحضير درس الأسبوع',
+        category: 'lesson_handout',
+        bibleVerse: submission.prepBibleVerse || '',
+        content: submission.prepNotes || `قام الخادم ${submission.servantName || 'المسؤول'} برفع ملف تحضير درس بعنوان: ${submission.prepTitle || 'درس جديد'}`,
+        attachmentName: submission.prepAttachmentName,
+        createdAt: new Date().toISOString().split('T')[0],
+        status: 'pending_approval',
+      };
+
+      if (existingPostIdx >= 0) {
+        currentDB.lessonPosts[existingPostIdx] = prepPost;
+      } else {
+        currentDB.lessonPosts.unshift(prepPost);
+      }
+    }
+
+    const notifTitle = submission.status === 'attending'
+      ? (submission.prepAttachmentName ? 'ملف تحضير درس جديد مرفوع من خادم 📄' : 'تأكيد حضور وتحضير درس خادم ✅')
+      : 'اعتذار خادم عن الحضور ❌';
+    const notifMsg = `${submission.servantName || 'خادم'}: ${
+      submission.status === 'attending'
+        ? (submission.prepTitle || (submission.prepAttachmentName ? `مرفق: ${submission.prepAttachmentName}` : 'حاضر الاجتماع القادم'))
+        : (submission.absenceReason || 'معتذر لظرف طارئ')
+    }`;
+
+    currentDB.notifications = [
+      {
+        id: `notif-${Date.now()}`,
+        title: notifTitle,
+        message: notifMsg,
+        timestamp: 'الآن',
+        type: 'servant_prep',
+        read: false,
+      },
+      ...currentDB.notifications,
+    ];
+
     saveDB(currentDB);
     res.json({ success: true, ok: true, data: currentDB, ...currentDB });
   } catch (err: any) {

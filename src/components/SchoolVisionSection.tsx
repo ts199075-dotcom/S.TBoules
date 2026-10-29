@@ -176,7 +176,7 @@ export const SchoolVisionSection: React.FC = () => {
           {[
             {
               title: 'البعد المسياني',
-              desc: 'اكتشاف النبوات والرموز والإشارات التي تقودنا إلى شخص السيد المسيح وعمله الخلاصي، خاصة في العهد القديم.',
+              desc: 'اكتشاف النبوات والرموز والإشارات التي تقودنا إلى شخص السيد المسيح وعمله الخلاصي في أسفار العهد القديم.',
               badge: 'المسيح أولاً',
             },
             {
@@ -217,7 +217,7 @@ export const SchoolVisionSection: React.FC = () => {
           ].map((col, idx) => (
             <div
               key={idx}
-              className="p-4 rounded-2xl bg-stone-50/80 dark:bg-stone-850 border border-stone-200 dark:border-stone-700/80 space-y-2 flex flex-col justify-between"
+              className="p-4 rounded-2xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 space-y-2 flex flex-col justify-between"
             >
               <div className="space-y-1.5">
                 <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
@@ -226,7 +226,7 @@ export const SchoolVisionSection: React.FC = () => {
                 <h4 className="font-bold text-xs sm:text-sm text-stone-900 dark:text-stone-100">
                   {col.title}
                 </h4>
-                <p className="text-[11px] text-stone-600 dark:text-stone-300 leading-relaxed">
+                <p className="text-[11px] text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
                   {col.desc}
                 </p>
               </div>

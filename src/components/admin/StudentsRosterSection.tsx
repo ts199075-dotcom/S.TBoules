@@ -28,6 +28,7 @@ interface StudentsRosterSectionProps {
   approveUser: (userId: string) => void;
   onOpenGrading: (student: UserProfile) => void;
   onOpenCertificate: (student: UserProfile) => void;
+  onSelectStudentProfile?: (student: UserProfile) => void;
   yearWorkApprovedClasses: Record<string, boolean>;
 }
 
@@ -41,6 +42,7 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
   approveUser,
   onOpenGrading,
   onOpenCertificate,
+  onSelectStudentProfile,
   yearWorkApprovedClasses,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -271,7 +273,17 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
 
                       <td className="py-3 px-3 font-bold text-stone-900 dark:text-stone-100">
                         <div className="flex items-center gap-2">
-                          <span>{student.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => onSelectStudentProfile?.(student)}
+                            className="text-right hover:text-amber-600 dark:hover:text-amber-400 hover:underline font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                            title="اضغط لفتح صفحة ملف الطالب الشاملة وبياناته ودرجاته"
+                          >
+                            <span>{student.name}</span>
+                            <span className="text-[10px] bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded border border-amber-300/40">
+                              ملف الطالب ↗
+                            </span>
+                          </button>
                           {student.age && (
                             <span className="text-[10px] text-stone-400 font-normal">
                               ({student.age} سنة)
@@ -314,7 +326,7 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
 
                       <td className="py-3 px-3 text-center">
                         <span className="inline-block px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-[11px]">
-                          {studentGrades.length} من ٨ حصص
+                          {studentGrades.length} من 8 حصص
                         </span>
                       </td>
 

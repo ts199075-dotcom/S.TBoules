@@ -20,9 +20,12 @@ import {
   Share2,
   Plus,
   LogOut,
+  Edit,
+  X,
 } from 'lucide-react';
 import { QrAttendanceModal } from './QrAttendanceModal';
-import { BibleSession } from '../types';
+import { BibleSession, ClassId, UserProfile } from '../types';
+import { sessionTotal } from '../lib/scores';
 
 export const ServantDashboard: React.FC = () => {
   const {
@@ -30,13 +33,24 @@ export const ServantDashboard: React.FC = () => {
     classes,
     users,
     sessions,
+    grades,
     servantSubmissions,
     lessonPosts,
     submitServantCheckIn,
     createLessonPost,
+    saveSessionGrade,
     getStudentScoreSummary,
+    getStudentSessionGrades,
     logout,
   } = useApp();
+
+  const servantClassId = currentUser?.classId || 'prep_2_3';
+  const classObj = classes.find((c) => c.id === servantClassId) || classes[4];
+  const classStudents = users.filter(
+    (u) => u.role === 'student' && u.classId === servantClassId && u.status === 'active'
+  );
+  const classSessions = sessions.filter((s) => s.classId === servantClassId);
+  const activeSessionForQr = classSessions[classSessions.length - 1] || sessions[0];
 
   const currentSubmission = servantSubmissions.find(
     (s) => s.servantId === currentUser?.id
@@ -68,6 +82,7 @@ export const ServantDashboard: React.FC = () => {
 
   // New Post Modal State (نشر شيء جديد يتطلب موافقة الأدمن)
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+  const [postTargetClass, setPostTargetClass] = useState<ClassId>(servantClassId);
   const [postTitle, setPostTitle] = useState('');
   const [postCategory, setPostCategory] = useState<'lesson_handout' | 'bible_study' | 'quiz' | 'announcement'>('lesson_handout');
   const [postVerse, setPostVerse] = useState('');
@@ -78,17 +93,143 @@ export const ServantDashboard: React.FC = () => {
   // QR Modal State
   const [selectedSessionForQr, setSelectedSessionForQr] = useState<BibleSession | null>(null);
 
-  // Servant's class
-  const servantClassId = currentUser?.classId || 'prep_2_3';
-  const classObj = classes.find((c) => c.id === servantClassId) || classes[4];
-  const classStudents = users.filter(
-    (u) => u.role === 'student' && u.classId === servantClassId && u.status === 'active'
-  );
-  const classSessions = sessions.filter((s) => s.classId === servantClassId);
-  const activeSessionForQr = classSessions[classSessions.length - 1] || sessions[0];
+  // Student Grading Modal State (رصد الدرجات من قبل الخادم)
+  const [gradingModalOpen, setGradingModalOpen] = useState(false);
+  const [selectedStudentForGrading, setSelectedStudentForGrading] = useState<UserProfile | null>(null);
+  const [selectedSessionForGrading, setSelectedSessionForGrading] = useState<string>('');
+  const [gradeExam, setGradeExam] = useState<number>(0);
+  const [gradeHomework, setGradeHomework] = useState<number>(0);
+  const [gradeAttendance, setGradeAttendance] = useState<number>(0);
+  const [gradeParticipation, setGradeParticipation] = useState<number>(0);
+  const [gradePrayer, setGradePrayer] = useState<number>(0);
+  const [gradeTools, setGradeTools] = useState<number>(0);
+  const [gradeNotes, setGradeNotes] = useState<string>('');
 
   // Posts created by this servant
   const myPosts = lessonPosts.filter((p) => p.servantId === currentUser?.id);
+
+  // 1. Pending Approval Screen for New Servants
+  if (currentUser?.status === 'pending') {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-6" dir="rtl">
+        <div className="w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-950 border-2 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+          <Clock className="w-10 h-10 animate-pulse" />
+        </div>
+
+        <div className="space-y-2">
+          <span className="px-3.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-xs border border-amber-300 dark:border-amber-700">
+            حساب خادم جديد بانتظار اعتماد وموافقة أمانة الخدمة ⏳
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
+            أهلاً بك يا خادم المسيح: {currentUser.name}
+          </h2>
+          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
+            تم تسجيل بياناتك بنجاح في مدرسة القديس بولس للكتاب المقدس. وبحسب لوائح المدرسة، <strong className="text-amber-800 dark:text-amber-400">لا يمكنك الدخول إلى الفصل أو رصد درجات الطلاب أو إرسال التحضيرات إلا بعد اعتماد وتفعيل حسابك رسميًا من أمين الخدمة أو مسؤول النظام</strong>.
+          </p>
+        </div>
+
+        <div className="bg-amber-50/80 dark:bg-slate-800 border border-amber-200 dark:border-slate-700 rounded-2xl p-5 text-right max-w-md mx-auto space-y-3">
+          <div className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+            <span>بيانات حساب الخادم المسجلة:</span>
+          </div>
+          <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
+            <div>• <strong>الفصل المخصص للخدمة:</strong> {classes.find(c => c.id === currentUser.classId)?.name || 'لم يحدد بعد'}</div>
+            <div>• <strong>رقم الهاتف:</strong> {currentUser.phone}</div>
+            <div>• <strong>أب الاعتراف:</strong> {currentUser.confessionFather || 'لم يحدد'}</div>
+            <div>• <strong>مسؤول الاعتماد:</strong> أمين الخدمة (ts199075@gmail.com)</div>
+          </div>
+        </div>
+
+        <div className="pt-4 flex items-center justify-center gap-3">
+          <button
+            onClick={logout}
+            className="px-5 py-2.5 rounded-xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-rose-500" />
+            <span>تسجيل الخروج من الحساب</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleOpenGrading = (student: UserProfile, preferredSessionId?: string) => {
+    setSelectedStudentForGrading(student);
+    const targetSessionId = preferredSessionId || classSessions[0]?.id || sessions[0]?.id || '';
+    setSelectedSessionForGrading(targetSessionId);
+
+    const existingGrade = grades.find(
+      (g) => g.studentId === student.id && g.sessionId === targetSessionId
+    );
+
+    if (existingGrade) {
+      setGradeExam(existingGrade.exam ?? 0);
+      setGradeHomework(existingGrade.homework ?? 0);
+      setGradeAttendance(existingGrade.attendance ?? 0);
+      setGradeParticipation(existingGrade.participation ?? 0);
+      setGradePrayer(existingGrade.prayer ?? 0);
+      setGradeTools(existingGrade.tools ?? 0);
+      setGradeNotes(existingGrade.notes || '');
+    } else {
+      // User requirement: start with 0 for all fields when adding a grade
+      setGradeExam(0);
+      setGradeHomework(0);
+      setGradeAttendance(0);
+      setGradeParticipation(0);
+      setGradePrayer(0);
+      setGradeTools(0);
+      setGradeNotes('');
+    }
+
+    setGradingModalOpen(true);
+  };
+
+  const handleSessionChangeInGrading = (newSessionId: string) => {
+    setSelectedSessionForGrading(newSessionId);
+    if (!selectedStudentForGrading) return;
+
+    const existingGrade = grades.find(
+      (g) => g.studentId === selectedStudentForGrading.id && g.sessionId === newSessionId
+    );
+
+    if (existingGrade) {
+      setGradeExam(existingGrade.exam ?? 0);
+      setGradeHomework(existingGrade.homework ?? 0);
+      setGradeAttendance(existingGrade.attendance ?? 0);
+      setGradeParticipation(existingGrade.participation ?? 0);
+      setGradePrayer(existingGrade.prayer ?? 0);
+      setGradeTools(existingGrade.tools ?? 0);
+      setGradeNotes(existingGrade.notes || '');
+    } else {
+      setGradeExam(0);
+      setGradeHomework(0);
+      setGradeAttendance(0);
+      setGradeParticipation(0);
+      setGradePrayer(0);
+      setGradeTools(0);
+      setGradeNotes('');
+    }
+  };
+
+  const handleSaveGrade = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForGrading || !selectedSessionForGrading) return;
+
+    saveSessionGrade({
+      studentId: selectedStudentForGrading.id,
+      sessionId: selectedSessionForGrading,
+      exam: Number(gradeExam),
+      homework: Number(gradeHomework),
+      attendance: Number(gradeAttendance),
+      participation: Number(gradeParticipation),
+      prayer: Number(gradePrayer),
+      tools: Number(gradeTools),
+      notes: gradeNotes,
+    });
+
+    setGradingModalOpen(false);
+  };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +258,7 @@ export const ServantDashboard: React.FC = () => {
       bibleVerse: postVerse.trim(),
       content: postContent.trim(),
       attachmentName: postAttachmentName.trim() || undefined,
-      classId: servantClassId,
+      classId: postTargetClass,
     });
 
     setPostTitle('');
@@ -449,7 +590,7 @@ export const ServantDashboard: React.FC = () => {
               قائمة طلاب فصلي ({classObj.name})
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              بيانات التواصل مع المخدومين ومتابعة درجاتهم.
+              «الخادم هو اللي يحط الدرجات وأمين الخدمة يقدر يتحكم برضه» - رصد وتعديل درجات الحصص (24 درجة).
             </p>
           </div>
 
@@ -461,22 +602,72 @@ export const ServantDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {classStudents.map((st) => {
             const scoreSummary = getStudentScoreSummary(st.id);
+            const studentGrades = getStudentSessionGrades(st.id);
             return (
               <div
                 key={st.id}
-                className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2 text-xs"
+                className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-3 text-xs flex flex-col justify-between"
               >
-                <div className="flex items-center justify-between">
-                  <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">{st.name}</div>
-                  <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-md">
-                    {scoreSummary.totalScore} / ١٠٠
-                  </span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold text-slate-800 dark:text-slate-200 text-sm">{st.name}</div>
+                    <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-md">
+                      {scoreSummary.isCalculated
+                        ? `${scoreSummary.yearWorkScore} / 60 معتمدة`
+                        : `${scoreSummary.yearWorkScore} نقطة تراكمية (${scoreSummary.gradedSessionsCount} / 8)`}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-slate-600 dark:text-slate-400 text-[11px]">
+                    <div>الهاتف: <strong className="font-mono">{st.phone}</strong></div>
+                    {st.guardianPhone && <div>ولي الأمر: <strong className="font-mono">{st.guardianPhone}</strong></div>}
+                  </div>
+
+                  {/* Graded Sessions with Dates */}
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                      <span>الحصص المرصودة وتواريخها:</span>
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">
+                        {studentGrades.length} من 8
+                      </span>
+                    </div>
+
+                    {studentGrades.length === 0 ? (
+                      <div className="text-[10px] text-slate-400 py-1">
+                        لم تُسجل درجات بعد لهذا الطالب.
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
+                        {studentGrades.map((g) => (
+                          <div
+                            key={g.id}
+                            className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between text-[11px]"
+                          >
+                            <span className="truncate max-w-[110px] font-medium" title={g.sessionTitle}>
+                              {g.sessionTitle}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              📅 {g.date}
+                            </span>
+                            <span className="font-black text-amber-800 dark:text-amber-300">
+                              {sessionTotal(g)} / 24
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="space-y-1 text-slate-600 dark:text-slate-400 text-[11px]">
-                  <div>الهاتف: <strong className="font-mono">{st.phone}</strong></div>
-                  {st.guardianPhone && <div>ولي الأمر: <strong className="font-mono">{st.guardianPhone}</strong></div>}
-                </div>
+                {/* Direct Action: Record & Edit Grades Button */}
+                <button
+                  type="button"
+                  onClick={() => handleOpenGrading(st)}
+                  className="w-full py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer mt-2"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>رصد وتصحيح درجات الحصص (24 درجة) 📝</span>
+                </button>
               </div>
             );
           })}
@@ -488,13 +679,31 @@ export const ServantDashboard: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4">
             <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-              إضافة مذكرة درس أو مسابقة للنشر بفصلك
+              إضافة مذكرة درس أو مسابقة للنشر بالفصل
             </h3>
             <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800">
               ⚠️ تنبيه: المنشور سيذهب أولاً للوحة تحكم الأدمن، ولن يتم نشره للطلاب إلا بعد اعتماده رسمياً.
             </p>
 
             <form onSubmit={handleCreatePost} className="space-y-3 text-xs">
+              {/* Target Class Selection */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  اختر الفصل المستهدف للمذكرة: <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={postTargetClass}
+                  onChange={(e) => setPostTargetClass(e.target.value as ClassId)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold"
+                >
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.ageRange})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   عنوان المذكرة / المسابقة <span className="text-rose-500">*</span>
@@ -562,6 +771,280 @@ export const ServantDashboard: React.FC = () => {
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
                 >
                   إرسال للأدمن للموافقة
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Servant 24-Point Grading Modal */}
+      {gradingModalOpen && selectedStudentForGrading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right">
+            <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 p-5 text-white flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                  <span className="text-xs text-amber-200 font-bold">بوابة رصد وتصحيح درجات الطالب</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-amber-50 mt-1">
+                  رصد درجات: {selectedStudentForGrading.name} ({classObj.name})
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGradingModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGrade} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  اختر الحصة الأسبوعية المراد رصدها: <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={selectedSessionForGrading}
+                  onChange={(e) => handleSessionChangeInGrading(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold"
+                >
+                  {classSessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.title} — 📅 تاريخ اللقاء: {s.date}
+                    </option>
+                  ))}
+                </select>
+
+                {(() => {
+                  const currSess = classSessions.find((s) => s.id === selectedSessionForGrading);
+                  return currSess ? (
+                    <div className="mt-1.5 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-between font-bold">
+                      <span>📅 تاريخ اللقاء: {currSess.date}</span>
+                      <span>الشاهد: {currSess.biblePassage}</span>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700 pb-2">
+                  <span>معايير التقييم الستة (إجمالي الحصة: 24 درجة)</span>
+                  <span className="text-amber-700 dark:text-amber-400 font-black text-sm">
+                    المجموع: {Number(gradeExam) + Number(gradeHomework) + Number(gradeAttendance) + Number(gradeParticipation) + Number(gradePrayer) + Number(gradeTools)} / 24
+                  </span>
+                </div>
+
+                {/* Exam & Homework */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        1. امتحان الدرس
+                      </label>
+                      <span className="text-xs font-black text-slate-500">من 10</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGradeExam((prev) => Math.max(0, Math.round((prev - 0.5) * 10) / 10))}
+                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold text-base cursor-pointer flex items-center justify-center"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.5}
+                        required
+                        value={gradeExam}
+                        onChange={(e) => setGradeExam(Math.min(10, Math.max(0, Number(e.target.value))))}
+                        className="flex-1 py-1.5 text-center font-black text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setGradeExam((prev) => Math.min(10, Math.round((prev + 0.5) * 10) / 10))}
+                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold text-base cursor-pointer flex items-center justify-center"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        2. الواجب والأبحاث
+                      </label>
+                      <span className="text-xs font-black text-slate-500">من 10</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGradeHomework((prev) => Math.max(0, Math.round((prev - 0.5) * 10) / 10))}
+                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold text-base cursor-pointer flex items-center justify-center"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        step={0.5}
+                        required
+                        value={gradeHomework}
+                        onChange={(e) => setGradeHomework(Math.min(10, Math.max(0, Number(e.target.value))))}
+                        className="flex-1 py-1.5 text-center font-black text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setGradeHomework((prev) => Math.min(10, Math.round((prev + 0.5) * 10) / 10))}
+                        className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold text-base cursor-pointer flex items-center justify-center"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* The 4 Criteria Toggle Buttons */}
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    المعايير المتبقية (اضغط لتغيير الدرجة):
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* الحضور باللقاء (يتلون بالأخضر عند التحضير) */}
+                    <button
+                      type="button"
+                      onClick={() => setGradeAttendance((prev) => (prev >= 1 ? 0 : 1))}
+                      className={`p-3.5 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
+                        gradeAttendance >= 1
+                          ? 'bg-emerald-600 text-white font-bold ring-2 ring-emerald-400 shadow-md border-emerald-700'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg">📱</span>
+                        <div>
+                          <div className={`text-xs font-black ${gradeAttendance >= 1 ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>
+                            حضور اللقاء
+                          </div>
+                          <div className={`text-[10px] mt-0.5 ${gradeAttendance >= 1 ? 'text-emerald-100 font-bold' : 'opacity-80'}`}>
+                            {gradeAttendance >= 1 ? 'حاضر باللقاء الآن ✅' : 'غائب (اضغط للتحضير ⭕)'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${gradeAttendance >= 1 ? 'bg-white text-emerald-800 shadow-xs' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                        {gradeAttendance >= 1 ? '1 / 1 حاضر ✅' : '0 / 1 غائب ⭕'}
+                      </span>
+                    </button>
+
+                    {/* الأدوات والنوتة */}
+                    <button
+                      type="button"
+                      onClick={() => setGradeTools((prev) => (prev >= 1 ? 0 : 1))}
+                      className={`p-3 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
+                        gradeTools >= 1
+                          ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🎒</span>
+                        <div>
+                          <div className="text-xs font-bold">الأدوات والكتاب</div>
+                          <div className="text-[10px] mt-0.5 opacity-80">
+                            {gradeTools >= 1 ? 'أحضر الكتاب والنوتة' : 'لم يحضر الأدوات'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeTools >= 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                        {gradeTools >= 1 ? '1 / 1 ✅' : '0 / 1 ⭕'}
+                      </span>
+                    </button>
+
+                    {/* حضور الصلاة */}
+                    <button
+                      type="button"
+                      onClick={() => setGradePrayer((prev) => (prev >= 1 ? 0 : 1))}
+                      className={`p-3 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
+                        gradePrayer >= 1
+                          ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">✝️</span>
+                        <div>
+                          <div className="text-xs font-bold">حضور الصلاة</div>
+                          <div className="text-[10px] mt-0.5 opacity-80">
+                            {gradePrayer >= 1 ? 'حضر الصلاة في الميعاد' : 'لم يحضر الصلاة'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradePrayer >= 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                        {gradePrayer >= 1 ? '1 / 1 ✅' : '0 / 1 ⭕'}
+                      </span>
+                    </button>
+
+                    {/* المشاركة والتفاعل */}
+                    <button
+                      type="button"
+                      onClick={() => setGradeParticipation((prev) => (prev >= 1 ? 0 : 1))}
+                      className={`p-3 rounded-xl border text-right transition-all flex items-center justify-between cursor-pointer ${
+                        gradeParticipation >= 1
+                          ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">💬</span>
+                        <div>
+                          <div className="text-xs font-bold">المشاركة والتفاعل</div>
+                          <div className="text-[10px] mt-0.5 opacity-80">
+                            {gradeParticipation >= 1 ? 'متفاعل ومشارك' : 'غير متفاعل'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeParticipation >= 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                        {gradeParticipation >= 1 ? '1 / 1 ✅' : '0 / 1 ⭕'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    ملاحظات وتشجيع الخادم للطالب:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="كلمة تشجيعية أو نقاط للمتابعة..."
+                    value={gradeNotes}
+                    onChange={(e) => setGradeNotes(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setGradingModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>حفظ الدرجة واعتمادها بالسيستم</span>
                 </button>
               </div>
             </form>

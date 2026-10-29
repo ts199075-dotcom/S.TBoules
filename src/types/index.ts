@@ -73,6 +73,7 @@ export interface ServantAttendanceSubmission {
   prepAttachmentName?: string;
   prepAttachmentType?: 'document' | 'pdf' | 'notes';
   prepNotes?: string;
+  classId?: ClassId;
   submittedAt: string;
   viewedByAdmin?: boolean;
 }
