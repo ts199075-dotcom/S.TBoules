@@ -9,6 +9,8 @@ import {
   ClassInfo,
   StudentScoreSummary,
   ServantLessonPost,
+  LibraryBook,
+  AcademicTerm,
 } from '../types';
 import {
   CLASSES_LIST,
@@ -19,6 +21,8 @@ import {
   INITIAL_SERVANT_SUBMISSIONS,
   INITIAL_NOTIFICATIONS,
   INITIAL_LESSON_POSTS,
+  INITIAL_LIBRARY_BOOKS,
+  INITIAL_TERMS,
   SAMPLE_USERS,
 } from '../data/mockData';
 import { readStoredJson, readStoredString, writeStoredJson } from '../lib/storage';
@@ -31,12 +35,17 @@ interface AppContextType {
   currentUser: UserProfile | null;
   users: UserProfile[];
   classes: ClassInfo[];
+  academicTerms: AcademicTerm[];
+  currentTermId: string;
+  setCurrentTermId: (termId: string) => void;
+  addAcademicTerm: (termData: Omit<AcademicTerm, 'id'>) => Promise<AcademicTerm>;
   sessions: BibleSession[];
   grades: SessionGrade[];
   finalExamScores: Record<string, number>;
   servantSubmissions: ServantAttendanceSubmission[];
   notifications: AppNotification[];
   lessonPosts: ServantLessonPost[];
+  libraryBooks: LibraryBook[];
   theme: 'light' | 'dark';
   backendStatus: BackendStatus;
   toggleTheme: () => void;
@@ -64,7 +73,8 @@ interface AppContextType {
     prepTitle?: string;
     prepBibleVerse?: string;
     prepAttachmentName?: string;
-    prepAttachmentType?: 'document' | 'pdf' | 'notes';
+    prepAttachmentType?: 'document' | 'pdf' | 'notes' | 'image';
+    prepAttachmentData?: string;
     prepNotes?: string;
   }) => void;
   createLessonPost: (postData: {
@@ -73,12 +83,18 @@ interface AppContextType {
     bibleVerse: string;
     content: string;
     attachmentName?: string;
+    fileData?: string;
+    fileType?: string;
     classId: ClassId;
+    targetAudience?: 'all' | 'servants_only' | 'students';
+    targetScope?: 'all_classes' | 'specific_class';
   }) => void;
   approveLessonPost: (postId: string) => void;
   rejectLessonPost: (postId: string, reason?: string) => void;
-  getStudentScoreSummary: (studentId: string) => StudentScoreSummary;
-  getClassLeaderboard: (classId: ClassId) => StudentScoreSummary[];
+  addLibraryBook: (bookData: Omit<LibraryBook, 'id' | 'addedAt' | 'addedBy'>) => Promise<LibraryBook>;
+  deleteLibraryBook: (bookId: string) => void;
+  getStudentScoreSummary: (studentId: string, termId?: string) => StudentScoreSummary;
+  getClassLeaderboard: (classId: ClassId, termId?: string) => StudentScoreSummary[];
   getStudentSessionGrades: (studentId: string) => SessionGrade[];
   addStudentByAdmin: (studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => Promise<UserProfile>;
   changeStudentClass: (studentId: string, newClassId: ClassId) => void;
@@ -104,18 +120,22 @@ const STORAGE_KEYS = {
   SERVANT_SUBS: 'st_paul_servant_subs_v5',
   NOTIFS: 'st_paul_notifs_v5',
   POSTS: 'st_paul_posts_v5',
+  LIBRARY: 'st_paul_library_v5',
   THEME: 'st_paul_theme_v5',
 };
 
 type RemoteState = {
   currentUser?: UserProfile | null;
   users?: UserProfile[];
+  academicTerms?: AcademicTerm[];
   sessions?: BibleSession[];
   grades?: SessionGrade[];
   finalExamScores?: Record<string, number>;
   servantSubmissions?: ServantAttendanceSubmission[];
   notifications?: AppNotification[];
   lessonPosts?: ServantLessonPost[];
+  libraryBooks?: LibraryBook[];
+  yearWorkApprovedClasses?: Record<string, boolean>;
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -126,6 +146,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('connecting');
   const [users, setUsers] = useState<UserProfile[]>(() => readStoredJson(STORAGE_KEYS.USERS, INITIAL_USERS));
   const [currentUserId, setCurrentUserId] = useState<string>(() => readStoredString(STORAGE_KEYS.CURRENT_USER_ID, ''));
+  const [academicTerms, setAcademicTerms] = useState<AcademicTerm[]>(() =>
+    readStoredJson('st_paul_terms_v5', INITIAL_TERMS)
+  );
+  const [currentTermId, setCurrentTermId] = useState<string>('term_1');
   const [sessions, setSessions] = useState<BibleSession[]>(() => readStoredJson(STORAGE_KEYS.SESSIONS, INITIAL_SESSIONS));
   const [grades, setGrades] = useState<SessionGrade[]>(() => readStoredJson(STORAGE_KEYS.GRADES, INITIAL_SESSION_GRADES));
   const [finalExamScores, setFinalExamScores] = useState<Record<string, number>>(() =>
@@ -140,6 +164,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [lessonPosts, setLessonPosts] = useState<ServantLessonPost[]>(() =>
     readStoredJson(STORAGE_KEYS.POSTS, INITIAL_LESSON_POSTS)
   );
+  const [libraryBooks, setLibraryBooks] = useState<LibraryBook[]>(() =>
+    readStoredJson(STORAGE_KEYS.LIBRARY, INITIAL_LIBRARY_BOOKS)
+  );
 
   const [yearWorkApprovedClasses, setYearWorkApprovedClasses] = useState<Record<string, boolean>>({});
 
@@ -150,12 +177,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCurrentUserId(state.currentUser.id);
     }
     if (Array.isArray(state.users)) setUsers(state.users);
+    if (Array.isArray(state.academicTerms) && state.academicTerms.length > 0) {
+      setAcademicTerms(state.academicTerms);
+    }
     if (Array.isArray(state.sessions)) setSessions(state.sessions);
     if (Array.isArray(state.grades)) setGrades(state.grades);
     if (state.finalExamScores && typeof state.finalExamScores === 'object') setFinalExamScores(state.finalExamScores);
     if (Array.isArray(state.servantSubmissions)) setServantSubmissions(state.servantSubmissions);
     if (Array.isArray(state.notifications)) setNotifications(state.notifications);
     if (Array.isArray(state.lessonPosts)) setLessonPosts(state.lessonPosts);
+    if (Array.isArray(state.libraryBooks)) setLibraryBooks(state.libraryBooks);
     if (state.yearWorkApprovedClasses && typeof state.yearWorkApprovedClasses === 'object') {
       setYearWorkApprovedClasses(state.yearWorkApprovedClasses);
     }
@@ -229,6 +260,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     if (persistLocal) writeStoredJson(STORAGE_KEYS.POSTS, lessonPosts);
   }, [lessonPosts, persistLocal]);
+  useEffect(() => {
+    if (persistLocal) writeStoredJson(STORAGE_KEYS.LIBRARY, libraryBooks);
+  }, [libraryBooks, persistLocal]);
 
   const currentUser = users.find((u) => u.id === currentUserId) || null;
   const toggleTheme = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
@@ -275,6 +309,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!found) return { success: false, message: 'لم يتم العثور على حساب بهذا البريد أو رقم الهاتف.' };
     if (found.status === 'rejected') {
       return { success: false, message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.' };
+    }
+    if (found.status === 'pending') {
+      return {
+        success: false,
+        message:
+          found.role === 'servant'
+            ? 'حساب الخادم قيد المراجعة والموافقة من قِبل أمين الخدمة. برجاء الانتظار حتى يتم اعتماد الحساب.'
+            : 'طلب التحاق المخدوم قيد المراجعة والاعتماد من أمين الخدمة. سيتم التفعيل قريباً.',
+      };
     }
     const expectedPassword = found.password || found.phone;
     if (expectedPassword !== passTrim) return { success: false, message: 'كلمة المرور غير صحيحة.' };
@@ -599,6 +642,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prepBibleVerse: data.prepBibleVerse,
       prepAttachmentName: data.prepAttachmentName,
       prepAttachmentType: data.prepAttachmentType,
+      prepAttachmentData: data.prepAttachmentData,
       prepNotes: data.prepNotes,
       submittedAt: new Date().toLocaleString('ar-EG'),
       viewedByAdmin: false,
@@ -622,6 +666,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         bibleVerse: data.prepBibleVerse || '',
         content: data.prepNotes || `قام الخادم ${currentUser.name} برفع ملف تحضير درس.`,
         attachmentName: data.prepAttachmentName,
+        fileData: data.prepAttachmentData,
         createdAt: new Date().toISOString().split('T')[0],
         status: 'pending_approval',
       };
@@ -635,7 +680,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     bibleVerse: string;
     content: string;
     attachmentName?: string;
+    fileData?: string;
+    fileType?: string;
     classId: ClassId;
+    targetAudience?: 'all' | 'servants_only' | 'students';
+    targetScope?: 'all_classes' | 'specific_class';
   }) => {
     if (!currentUser) return;
     const newPost: ServantLessonPost = {
@@ -648,16 +697,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       bibleVerse: postData.bibleVerse,
       content: postData.content,
       attachmentName: postData.attachmentName,
+      fileData: postData.fileData,
+      fileType: postData.fileType,
       createdAt: new Date().toISOString().split('T')[0],
       status: currentUser.role === 'admin' ? 'approved' : 'pending_approval',
       approvedBy: currentUser.role === 'admin' ? currentUser.name : undefined,
       approvedAt: currentUser.role === 'admin' ? new Date().toISOString().split('T')[0] : undefined,
+      targetAudience: postData.targetAudience || 'all',
+      targetScope: postData.targetScope || 'specific_class',
     };
     if (backendStatus === 'online') {
       void remote('/api/posts', { method: 'POST', body: JSON.stringify({ action: 'create', post: newPost, ...newPost }) });
       return;
     }
     setLessonPosts((prev) => [newPost, ...prev]);
+  };
+
+  const addLibraryBook = async (bookData: Omit<LibraryBook, 'id' | 'addedAt' | 'addedBy'>) => {
+    const newBook: LibraryBook = {
+      ...bookData,
+      id: `book-${Date.now()}`,
+      addedBy: currentUser?.name || 'أمين الخدمة',
+      addedAt: new Date().toISOString().split('T')[0],
+    };
+    if (backendStatus === 'online') {
+      void remote('/api/library', { method: 'POST', body: JSON.stringify(newBook) });
+      return newBook;
+    }
+    setLibraryBooks((prev) => [newBook, ...prev]);
+    return newBook;
+  };
+
+  const deleteLibraryBook = (bookId: string) => {
+    if (backendStatus === 'online') {
+      void remote(`/api/library/${bookId}`, { method: 'DELETE' });
+      return;
+    }
+    setLibraryBooks((prev) => prev.filter((b) => b.id !== bookId));
+  };
+
+  const addAcademicTerm = async (termData: Omit<AcademicTerm, 'id'>): Promise<AcademicTerm> => {
+    const newTerm: AcademicTerm = {
+      id: `term_${Date.now()}`,
+      ...termData,
+    };
+    if (backendStatus === 'online') {
+      void remote('/api/terms', { method: 'POST', body: JSON.stringify(newTerm) });
+      return newTerm;
+    }
+    setAcademicTerms((prev) => [...prev, newTerm]);
+    return newTerm;
   };
 
   const approveLessonPost = (postId: string) => {
@@ -684,11 +773,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  const getStudentScoreSummary = (studentId: string): StudentScoreSummary =>
-    computeStudentScoreSummary(studentId, users, sessions, grades, finalExamScores);
+  const getStudentScoreSummary = (studentId: string, termId?: string): StudentScoreSummary =>
+    computeStudentScoreSummary(studentId, users, sessions, grades, finalExamScores, termId || currentTermId);
 
-  const getClassLeaderboard = (classId: ClassId): StudentScoreSummary[] =>
-    computeClassLeaderboard(classId, users, sessions, grades, finalExamScores);
+  const getClassLeaderboard = (classId: ClassId, termId?: string): StudentScoreSummary[] =>
+    computeClassLeaderboard(classId, users, sessions, grades, finalExamScores, termId || currentTermId);
 
   const getStudentSessionGrades = (studentId: string): SessionGrade[] => grades.filter((g) => g.studentId === studentId);
 
@@ -755,12 +844,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         currentUser,
         users,
         classes: CLASSES_LIST,
+        academicTerms,
+        currentTermId,
+        setCurrentTermId,
+        addAcademicTerm,
         sessions,
         grades,
         finalExamScores,
         servantSubmissions,
         notifications,
         lessonPosts,
+        libraryBooks,
         theme,
         backendStatus,
         toggleTheme,
@@ -782,6 +876,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createLessonPost,
         approveLessonPost,
         rejectLessonPost,
+        addLibraryBook,
+        deleteLibraryBook,
         getStudentScoreSummary,
         getClassLeaderboard,
         getStudentSessionGrades,

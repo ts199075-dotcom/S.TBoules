@@ -4,19 +4,23 @@ import { fileURLToPath } from 'node:url';
 import {
   AppNotification,
   BibleSession,
+  LibraryBook,
   ServantAttendanceSubmission,
   ServantLessonPost,
   SessionGrade,
   UserProfile,
+  AcademicTerm,
 } from '../src/types';
 import {
   INITIAL_FINAL_EXAM_SCORES,
   INITIAL_LESSON_POSTS,
+  INITIAL_LIBRARY_BOOKS,
   INITIAL_NOTIFICATIONS,
   INITIAL_SERVANT_SUBMISSIONS,
   INITIAL_SESSION_GRADES,
   INITIAL_SESSIONS,
   INITIAL_USERS,
+  INITIAL_TERMS,
 } from '../src/data/mockData';
 import { hashPassword } from './auth';
 
@@ -35,6 +39,9 @@ export interface DbShape {
   servantSubmissions: ServantAttendanceSubmission[];
   notifications: AppNotification[];
   lessonPosts: ServantLessonPost[];
+  libraryBooks: LibraryBook[];
+  yearWorkApprovedClasses: Record<string, boolean>;
+  academicTerms: AcademicTerm[];
   authSessions: SessionToken[];
 }
 
@@ -58,6 +65,9 @@ function emptyDb(): DbShape {
     servantSubmissions: INITIAL_SERVANT_SUBMISSIONS,
     notifications: INITIAL_NOTIFICATIONS,
     lessonPosts: INITIAL_LESSON_POSTS,
+    libraryBooks: INITIAL_LIBRARY_BOOKS,
+    yearWorkApprovedClasses: {},
+    academicTerms: INITIAL_TERMS,
     authSessions: [],
   };
 }
@@ -85,6 +95,9 @@ export function loadDb(): DbShape {
       servantSubmissions: parsed.servantSubmissions || [],
       notifications: parsed.notifications || [],
       lessonPosts: parsed.lessonPosts || [],
+      libraryBooks: parsed.libraryBooks?.length ? parsed.libraryBooks : INITIAL_LIBRARY_BOOKS,
+      yearWorkApprovedClasses: parsed.yearWorkApprovedClasses || {},
+      academicTerms: parsed.academicTerms?.length ? parsed.academicTerms : INITIAL_TERMS,
       authSessions: parsed.authSessions || [],
     };
   } catch {

@@ -36,13 +36,15 @@ import {
   Trash2,
   PartyPopper,
   Megaphone,
+  BookMarked,
 } from 'lucide-react';
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
 import { StudentsRosterSection } from './admin/StudentsRosterSection';
 import { ServantsSection } from './admin/ServantsSection';
+import { LibrarySection } from './admin/LibrarySection';
 
-export type AdminTab = 'students' | 'servants' | 'classes' | 'scores' | 'pending' | 'post_approvals' | 'reports' | 'events';
+export type AdminTab = 'students' | 'servants' | 'classes' | 'scores' | 'pending' | 'post_approvals' | 'reports' | 'events' | 'library';
 
 interface AdminDashboardProps {
   initialTab?: AdminTab;
@@ -62,6 +64,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     finalExamScores,
     servantSubmissions,
     lessonPosts,
+    libraryBooks,
     approveUser,
     rejectUser,
     toggleAssistantRole,
@@ -75,6 +78,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     approveLessonPost,
     rejectLessonPost,
     createLessonPost,
+    addLibraryBook,
+    deleteLibraryBook,
     yearWorkApprovedClasses,
     getStudentScoreSummary,
     getClassLeaderboard,
@@ -90,9 +95,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedClassId, setSelectedClassId] = useState<ClassId>(initialClassId || 'primary_4');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Per-Class Targeted Post Modal State
+  // Per-Class Targeted Post Modal State with Audience Selection (User Request)
   const [newPostModalOpen, setNewPostModalOpen] = useState(false);
   const [newPostTargetClass, setNewPostTargetClass] = useState<ClassId>('primary_4');
+  const [newPostAudience, setNewPostAudience] = useState<'all' | 'servants_only' | 'students'>('all');
+  const [newPostScope, setNewPostScope] = useState<'all_classes' | 'specific_class'>('specific_class');
   const [newPostTitle, setNewPostTitle] = useState('');
   const [newPostCategory, setNewPostCategory] = useState<'announcement' | 'lesson_handout' | 'bible_study' | 'quiz'>('announcement');
   const [newPostVerse, setNewPostVerse] = useState('');
@@ -119,12 +126,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       content: newPostContent.trim(),
       attachmentName: newPostAttachment.trim() || undefined,
       classId: newPostTargetClass,
+      targetAudience: newPostAudience,
+      targetScope: newPostScope,
     });
 
     setNewPostTitle('');
     setNewPostVerse('');
     setNewPostContent('');
     setNewPostAttachment('');
+    setNewPostAudience('all');
+    setNewPostScope('specific_class');
     setNewPostModalOpen(false);
     setPostPublishedSuccess(true);
     setTimeout(() => setPostPublishedSuccess(false), 5000);
@@ -326,17 +337,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
-        {/* Quick Summary Pill & Alerts & Features Guide Button */}
+        {/* Quick Summary Pill & Alerts */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
-          {/* Features Guide Button Requested by User */}
-          <button
-            onClick={() => setFeaturesModalOpen(true)}
-            className="bg-amber-600 hover:bg-amber-500 text-slate-950 p-3 px-4 rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer hover:scale-105"
-            title="عرض خريطة كافة فيتشرز وإمكانيات المنصة"
-          >
-            <Sparkles className="w-4 h-4 text-slate-950" />
-            <span>📋 دليل كافة مميزات المنصة</span>
-          </button>
 
           {/* Quick Logout Button */}
           <button
@@ -616,6 +618,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           <PartyPopper className="w-4 h-4 text-purple-400" />
           <span>الحفلات والمناسبات والتكريمات</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('library')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'library'
+              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+          }`}
+        >
+          <BookMarked className="w-4 h-4 text-amber-500" />
+          <span>المكتبة ومراجع الخدام ({libraryBooks.length})</span>
         </button>
       </div>
 
@@ -1609,15 +1623,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODAL: Targeted Per-Class Post Publishing (Requested by User) */}
+      {/* TAB 9: المكتبة والمراجع الكنسية */}
+      {activeTab === 'library' && (
+        <LibrarySection
+          libraryBooks={libraryBooks}
+          onAddBook={addLibraryBook}
+          onDeleteBook={deleteLibraryBook}
+          canManage={true}
+        />
+      )}
+
+      {/* MODAL: Targeted Per-Class / Audience Post Publishing (Requested by User) */}
       {newPostModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
               <div className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-600" />
                 <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                  نشر إعلان أو مذكرة موجهة لفصل معين حصرياً
+                  نشر إعلان أو مذكرة مع تحديد الجمهور والفصل
                 </h3>
               </div>
               <button
@@ -1629,22 +1653,98 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <form onSubmit={handleAdminCreatePost} className="space-y-3.5 text-xs">
-              {/* Target Class Selection (Mandatory per User Request) */}
-              <div>
-                <label className="block font-bold text-stone-800 dark:text-stone-200 mb-1.5">
-                  اختر الفصل المستهدف (سيتم النشر حصرياً لطلاب هذا الفصل فقط): <span className="text-rose-500">*</span>
+              {/* Audience Selector (User Request 2) */}
+              <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-800/60 space-y-2">
+                <label className="block font-bold text-amber-950 dark:text-amber-200 text-xs">
+                  تحديد الجمهور المستهدف للإعلان: <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={newPostTargetClass}
-                  onChange={(e) => setNewPostTargetClass(e.target.value as ClassId)}
-                  className="w-full px-3 py-2 rounded-xl border border-amber-500/50 bg-amber-50/40 dark:bg-stone-800 font-bold text-amber-950 dark:text-amber-200"
-                >
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name} ({cls.ageRange})
-                    </option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewPostAudience('all')}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      newPostAudience === 'all'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-300 dark:border-stone-700'
+                    }`}
+                  >
+                    للجميع (خدام وطلاب)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewPostAudience('servants_only')}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      newPostAudience === 'servants_only'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-300 dark:border-stone-700'
+                    }`}
+                  >
+                    للخدام فقط ✝️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewPostAudience('students')}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      newPostAudience === 'students'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-300 dark:border-stone-700'
+                    }`}
+                  >
+                    للطلاب فقط 🎓
+                  </button>
+                </div>
+
+                {/* If for students or all: Choose scope (all classes or specific class) */}
+                {newPostAudience !== 'servants_only' && (
+                  <div className="pt-2 border-t border-amber-200/60 dark:border-amber-800/40 space-y-2">
+                    <label className="block font-bold text-stone-800 dark:text-stone-200">
+                      نطاق نشر الفصول:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewPostScope('all_classes')}
+                        className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                          newPostScope === 'all_classes'
+                            ? 'bg-slate-900 text-amber-300 border-slate-900'
+                            : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200'
+                        }`}
+                      >
+                        عام لكل الفصول الـ ٧
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewPostScope('specific_class')}
+                        className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                          newPostScope === 'specific_class'
+                            ? 'bg-slate-900 text-amber-300 border-slate-900'
+                            : 'bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border-stone-200'
+                        }`}
+                      >
+                        فصل دراسي محدد فقط
+                      </button>
+                    </div>
+
+                    {newPostScope === 'specific_class' && (
+                      <div className="pt-1">
+                        <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                          اختر الفصل المحدد:
+                        </label>
+                        <select
+                          value={newPostTargetClass}
+                          onChange={(e) => setNewPostTargetClass(e.target.value as ClassId)}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-500/50 bg-white dark:bg-stone-800 font-bold text-amber-950 dark:text-amber-200"
+                        >
+                          {classes.map((cls) => (
+                            <option key={cls.id} value={cls.id}>
+                              {cls.name} ({cls.ageRange})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Title & Category */}
@@ -1821,9 +1921,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="bg-stone-50 dark:bg-stone-800/90 p-4 rounded-2xl border border-stone-200 dark:border-stone-700 space-y-4">
                 <div className="flex items-center justify-between text-xs font-bold text-stone-900 dark:text-stone-100 border-b border-stone-200 dark:border-stone-700 pb-2">
-                  <span>معايير التقييم الستة (إجمالي اللقاء: ٢٤ درجة)</span>
-                  <span className="text-amber-800 dark:text-amber-400 font-black text-sm">
-                    المجموع: {Number(gradeExam) + Number(gradeHomework) + Number(gradeAttendance) + Number(gradeParticipation) + Number(gradePrayer) + Number(gradeTools)} / ٢٤
+                  <span>معايير التقييم الستة (إجمالي الحصة: 24 درجة)</span>
+                  <span className="text-amber-800 dark:text-amber-400 font-black text-sm" dir="ltr">
+                    {Number(gradeExam) + Number(gradeHomework) + Number(gradeAttendance) + Number(gradeParticipation) + Number(gradePrayer) + Number(gradeTools)} / 24
                   </span>
                 </div>
 
@@ -1832,9 +1932,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="p-3 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-bold text-stone-700 dark:text-stone-300">
-                        ١. امتحان الدرس
+                        1. امتحان الدرس
                       </label>
-                      <span className="text-xs font-black text-stone-500">من ١٠</span>
+                      <span className="text-xs font-black text-stone-500" dir="ltr">من 10</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1850,9 +1950,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         max={10}
                         step={0.5}
                         required
+                        dir="ltr"
                         value={gradeExam}
                         onChange={(e) => setGradeExam(Math.min(10, Math.max(0, Number(e.target.value))))}
-                        className="flex-1 py-1.5 text-center font-black text-sm rounded-lg border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100"
+                        className="flex-1 py-1.5 text-center font-black text-sm rounded-lg border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-mono"
                       />
                       <button
                         type="button"
@@ -1867,9 +1968,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="p-3 bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-bold text-stone-700 dark:text-stone-300">
-                        ٢. الواجب والأبحاث
+                        2. الواجب والأبحاث
                       </label>
-                      <span className="text-xs font-black text-stone-500">من ١٠</span>
+                      <span className="text-xs font-black text-stone-500" dir="ltr">من 10</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1885,9 +1986,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         max={10}
                         step={0.5}
                         required
+                        dir="ltr"
                         value={gradeHomework}
                         onChange={(e) => setGradeHomework(Math.min(10, Math.max(0, Number(e.target.value))))}
-                        className="flex-1 py-1.5 text-center font-black text-sm rounded-lg border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100"
+                        className="flex-1 py-1.5 text-center font-black text-sm rounded-lg border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-mono"
                       />
                       <button
                         type="button"
@@ -1903,7 +2005,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* The 4 Criteria as One-Click Toggle Buttons (الأدوات، الحضور، الصلاة، المشاركة) */}
                 <div className="space-y-2">
                   <div className="text-[11px] font-bold text-stone-600 dark:text-stone-400">
-                    اضغط على أي معيار لتغيير حالته فوراً (١ أو ٠):
+                    اضغط على أي معيار لتغيير حالته فوراً (1 أو 0):
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1926,8 +2028,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeTools >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`}>
-                        {gradeTools >= 1 ? '١ / ١ ✅' : '٠ / ١ ⭕'}
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeTools >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`} dir="ltr">
+                        {gradeTools >= 1 ? '1 / 1 ✅' : '0 / 1 ⭕'}
                       </span>
                     </button>
 
@@ -1950,8 +2052,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradePrayer >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`}>
-                        {gradePrayer >= 1 ? '١ / ١ ✅' : '٠ / ١ ⭕'}
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradePrayer >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`} dir="ltr">
+                        {gradePrayer >= 1 ? '1 / 1 ✅' : '0 / 1 ⭕'}
                       </span>
                     </button>
 
@@ -1976,8 +2078,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${gradeAttendance >= 1 ? 'bg-white text-emerald-800 shadow-xs' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`}>
-                        {gradeAttendance >= 1 ? '١ / ١ حاضر ✅' : '٠ / ١ غائب ⭕'}
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${gradeAttendance >= 1 ? 'bg-white text-emerald-800 shadow-xs' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`} dir="ltr">
+                        {gradeAttendance >= 1 ? '1 / 1 حاضر ✅' : '0 / 1 غائب ⭕'}
                       </span>
                     </button>
 
@@ -2000,8 +2102,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeParticipation >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`}>
-                        {gradeParticipation >= 1 ? '١ / ١ ✅' : '٠ / ١ ⭕'}
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${gradeParticipation >= 1 ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300'}`} dir="ltr">
+                        {gradeParticipation >= 1 ? '1 / 1 ✅' : '0 / 1 ⭕'}
                       </span>
                     </button>
                   </div>

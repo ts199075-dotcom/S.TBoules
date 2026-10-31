@@ -25,15 +25,20 @@ export function computeStudentScoreSummary(
   users: UserProfile[],
   sessions: BibleSession[],
   grades: SessionGrade[],
-  finalExamScores: Record<string, number>
+  finalExamScores: Record<string, number>,
+  termId?: string
 ): StudentScoreSummary {
   const student = users.find((u) => u.id === studentId);
   const classId: ClassId = student?.classId || 'prep_2_3';
-  const classSessions = sessions.filter((s) => s.classId === classId);
-  const studentGrades = grades.filter((g) => g.studentId === studentId);
+  const classSessions = sessions.filter(
+    (s) => s.classId === classId && (!termId || (s.termId || 'term_1') === termId)
+  );
+  const studentGrades = grades.filter(
+    (g) => g.studentId === studentId && (!termId || (g.termId || 'term_1') === termId)
+  );
   const totalSessionsCount = classSessions.length;
 
-  // Cumulative sum of points earned across all graded sessions so far
+  // Cumulative sum of points earned across all graded sessions so far in this term
   const cumulativeEarnedSum = studentGrades.reduce((acc, g) => acc + sessionTotal(g), 0);
   const attendedSessionsCount = studentGrades.filter((g) => Number(g.attendance || 0) >= 1).length;
   const gradedSessionsCount = studentGrades.length;
@@ -51,13 +56,15 @@ export function computeStudentScoreSummary(
     yearWorkScore = Math.round(cumulativeEarnedSum * 10) / 10;
   }
 
-  const finalExamScore = clamp(finalExamScores[studentId] ?? 0, 0, FINAL_EXAM_MAX);
+  const finalExamKey = termId && termId !== 'term_1' ? `${studentId}_${termId}` : studentId;
+  const finalExamScore = clamp(finalExamScores[finalExamKey] ?? finalExamScores[studentId] ?? 0, 0, FINAL_EXAM_MAX);
   const totalScore = Math.round((yearWorkScore + finalExamScore) * 10) / 10;
 
   return {
     studentId,
     studentName: student?.name || 'مخدوم',
     classId,
+    termId,
     totalSessionsCount,
     attendedSessionsCount,
     gradedSessionsCount,
@@ -73,13 +80,14 @@ export function computeClassLeaderboard(
   users: UserProfile[],
   sessions: BibleSession[],
   grades: SessionGrade[],
-  finalExamScores: Record<string, number>
+  finalExamScores: Record<string, number>,
+  termId?: string
 ): StudentScoreSummary[] {
   const classStudents = users.filter(
     (u) => u.role === 'student' && u.classId === classId && u.status === 'active'
   );
   const summaries = classStudents.map((st) =>
-    computeStudentScoreSummary(st.id, users, sessions, grades, finalExamScores)
+    computeStudentScoreSummary(st.id, users, sessions, grades, finalExamScores, termId)
   );
   summaries.sort((a, b) => b.totalScore - a.totalScore);
   return summaries.map((s, index) => ({

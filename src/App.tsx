@@ -33,9 +33,6 @@ const MainAppContent: React.FC = () => {
   useEffect(() => {
     if (!currentUser) {
       prevUserIdRef.current = null;
-      if (currentTab === 'admin' || currentTab === 'student' || currentTab === 'servant') {
-        setCurrentTab('home');
-      }
       return;
     }
 

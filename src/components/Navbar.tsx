@@ -112,38 +112,29 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
       </div>
 
       {/* Main Navbar */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-3">
         {/* Brand / Logo with St. Paul Avatar */}
-        <div className="flex items-center gap-2 min-w-0">
-        <button
-          type="button"
-          className="md:hidden p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
-          aria-label="قائمة التنقل"
-          aria-expanded={mobileMenuOpen}
-          onClick={() => setMobileMenuOpen((open) => !open)}
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setCurrentTab('home')}
-          className="flex items-center gap-2.5 group shrink-0 text-right min-w-0"
-        >
-          <BrandMark className="group-hover:scale-105 transition-transform" />
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100 tracking-tight group-hover:text-amber-700 dark:group-hover:text-amber-400">
-                مدرسة سانت بولس
-              </span>
-              <span className="hidden lg:inline-block text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium px-2 py-0.5 rounded border border-stone-200 dark:border-stone-700">
-                الكتاب المقدس
-              </span>
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink">
+          <button
+            type="button"
+            onClick={() => setCurrentTab('home')}
+            className="flex items-center gap-2 group shrink-0 text-right min-w-0"
+          >
+            <BrandMark className="group-hover:scale-105 transition-transform w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs sm:text-base font-bold text-stone-900 dark:text-stone-100 tracking-tight group-hover:text-amber-700 dark:group-hover:text-amber-400 truncate">
+                  مدرسة سانت بولس
+                </span>
+                <span className="hidden lg:inline-block text-[10px] bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium px-2 py-0.5 rounded border border-stone-200 dark:border-stone-700 shrink-0">
+                  الكتاب المقدس
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-stone-500 dark:text-stone-400 hidden sm:block truncate">
+                {CHURCH_NAME}
+              </p>
             </div>
-            <p className="text-[11px] text-stone-500 dark:text-stone-400 hidden sm:block truncate">
-              {CHURCH_NAME}
-            </p>
-          </div>
-        </button>
+          </button>
         </div>
 
         {/* Desktop Navigation Tabs */}
@@ -207,12 +198,12 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
         </nav>
 
         {/* User Actions & Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Dark Mode Toggle */}
-            <button
-              type="button"
+          <button
+            type="button"
             onClick={toggleTheme}
-            className="p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+            className="p-1.5 sm:p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 shrink-0 cursor-pointer"
             title={theme === 'dark' ? 'التحويل للوضع المضيء' : 'التحويل للوضع الليلي'}
             aria-label={theme === 'dark' ? 'التحويل للوضع المضيء' : 'التحويل للوضع الليلي'}
           >
@@ -224,20 +215,20 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
           </button>
 
           {/* Notifications Popover */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => {
                 setShowNotifications(!showNotifications);
                 setShowUserMenu(false);
               }}
-              className="relative p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+              className="relative p-1.5 sm:p-2 rounded-xl text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 shrink-0 cursor-pointer"
               title="الإشعارات والتحديثات"
               aria-label="الإشعارات"
               aria-expanded={showNotifications}
             >
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-bold">
+                <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-rose-600 text-white text-[9px] sm:text-[10px] flex items-center justify-center font-bold">
                   {unreadCount}
                 </span>
               )}
@@ -308,17 +299,17 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
           {/* Current User Menu & Direct Logout */}
           {currentUser ? (
-            <div className="flex items-center gap-1.5">
-              <div className="relative">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <div className="relative shrink-0">
                 <button
                   onClick={() => {
                     setShowUserMenu(!showUserMenu);
                     setShowNotifications(false);
                   }}
-                  className="flex items-center gap-2 p-1 sm:p-1.5 sm:pl-3 rounded-xl border border-stone-200 dark:border-stone-700 hover:border-amber-600/50 bg-white dark:bg-stone-800 shadow-2xs transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 p-1 sm:p-1.5 sm:pl-3 rounded-xl border border-stone-200 dark:border-stone-700 hover:border-amber-600/50 bg-white dark:bg-stone-800 shadow-2xs transition-all cursor-pointer shrink-0"
                   title="بيانات الحساب والقائمة"
                 >
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-stone-900 dark:bg-amber-700 text-white font-bold text-xs flex items-center justify-center">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-stone-900 dark:bg-amber-700 text-white font-bold text-xs flex items-center justify-center shrink-0">
                     {currentUser.name.slice(0, 1)}
                   </div>
                   <div className="hidden sm:block text-right">
@@ -329,7 +320,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
                       {isAdmin ? 'مسؤول النظام' : currentUser.role === 'servant' ? 'خادم' : 'مخدوم'}
                     </div>
                   </div>
-                  <ChevronDown className="w-3 h-3 text-stone-400" />
+                  <ChevronDown className="w-3 h-3 text-stone-400 hidden sm:block shrink-0" />
                 </button>
 
                 {/* Fully Responsive User Menu Popover */}
@@ -417,35 +408,36 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
               {/* Direct Quick Logout Button in Top Bar */}
               <button
                 onClick={logout}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-900/60 transition-colors cursor-pointer shadow-2xs"
+                className="flex items-center gap-1 p-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-900/60 transition-colors cursor-pointer shadow-2xs shrink-0"
                 title="تسجيل الخروج المباشر من الحساب"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">تسجيل خروج</span>
+                <span className="hidden sm:inline">خروج</span>
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               <button
                 onClick={() => onOpenAuth('login')}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+                className="px-2 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer shrink-0"
               >
                 دخول
               </button>
               <button
                 onClick={() => onOpenAuth('register')}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-700 hover:bg-amber-800 text-white shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-700 hover:bg-amber-800 text-white shadow-xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>حساب جديد</span>
+                <span className="hidden sm:inline">حساب جديد</span>
+                <span className="sm:hidden">تسجيل</span>
               </button>
             </div>
           )}
 
-          {/* Master Menu (Three Bars ☰) Button - Visible on All Screens as Requested */}
+          {/* Master Menu (Three Bars ☰) Button */}
           <button
             onClick={() => setMasterMenuOpen(true)}
-            className="flex items-center gap-1.5 p-2 sm:px-3 rounded-xl bg-amber-600/15 hover:bg-amber-600/25 text-amber-900 dark:text-amber-200 border border-amber-600/30 transition-all cursor-pointer font-bold text-xs"
+            className="flex items-center gap-1 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-amber-600/15 hover:bg-amber-600/25 text-amber-900 dark:text-amber-200 border border-amber-600/30 transition-all cursor-pointer font-bold text-xs shrink-0"
             title="القائمة الشاملة (الفصول، الطلاب، الدرجات، الخدام، الإعلانات، التقارير، الحفلات)"
             aria-label="القائمة الشاملة"
           >

@@ -28,12 +28,25 @@ export interface ClassInfo {
   iconName: string;
 }
 
+// Educational Academic Term / Semester System (نظام التيرمات والفصول الدراسية)
+export interface AcademicTerm {
+  id: string;               // e.g., 'term_1', 'term_2', 'term_3'
+  title: string;            // 'الترم الأول', 'الترم الثاني'
+  bookSubject: string;      // 'سفر التكوين', 'سفر الخروج', 'سفر اللاويين والعدد'
+  description?: string;     // نبذة عن محتوى ومحاور الترم
+  sessionsCount: number;    // عدد الحصص (٨ حصص لكل تيرم)
+  isCurrent: boolean;       // هل هو الترم الجاري دراسته حالياً
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface SessionGrade {
   id: string;
   sessionId: string;
   sessionTitle: string;
   date: string;
   studentId: string;
+  termId?: string;       // معرّف الترم التابع له (افتراضياً: term_1)
   exam: number;          // من 10 (درجة الامتحان)
   homework: number;      // من 10 (الواجب)
   attendance: number;    // من 1 (درجة الحضور)
@@ -48,6 +61,7 @@ export interface StudentScoreSummary {
   studentId: string;
   studentName: string;
   classId: ClassId;
+  termId?: string;              // التيرم المحسوب له التقرير
   totalSessionsCount: number;   // إجمالي حصص الكورس (٨ حصص)
   gradedSessionsCount: number;  // عدد الحصص المرصودة حتى الآن (من ٨)
   attendedSessionsCount: number;
@@ -71,7 +85,8 @@ export interface ServantAttendanceSubmission {
   prepTitle?: string;
   prepBibleVerse?: string;
   prepAttachmentName?: string;
-  prepAttachmentType?: 'document' | 'pdf' | 'notes';
+  prepAttachmentType?: 'document' | 'pdf' | 'notes' | 'image';
+  prepAttachmentData?: string; // Real uploaded base64 file data
   prepNotes?: string;
   classId?: ClassId;
   submittedAt: string;
@@ -90,11 +105,33 @@ export interface ServantLessonPost {
   content: string;
   attachmentName?: string;
   attachmentUrl?: string;
+  fileData?: string;           // Real uploaded base64 file data
+  fileType?: string;           // MIME type (application/pdf, image/png, etc.)
   createdAt: string;
   status: 'pending_approval' | 'approved' | 'rejected';
   rejectionReason?: string;
   approvedBy?: string;
   approvedAt?: string;
+  targetAudience?: 'all' | 'servants_only' | 'students';
+  targetScope?: 'all_classes' | 'specific_class';
+}
+
+// Church Library & References for servants and lesson preparation
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string;
+  category: 'old_testament' | 'new_testament' | 'patristic' | 'theology_creed' | 'servant_prep' | 'church_ritual';
+  description: string;
+  targetClassId?: ClassId | 'all_classes';
+  downloadUrl?: string;
+  fileName?: string;
+  fileData?: string;           // Real uploaded base64 data for immediate download
+  fileType?: string;           // e.g. application/pdf, image/jpeg
+  fileSize?: string;
+  pageCount?: number;
+  addedBy: string;
+  addedAt: string;
 }
 
 export interface UserProfile {
@@ -119,6 +156,7 @@ export interface BibleSession {
   id: string;
   title: string;
   classId: ClassId;
+  termId?: string;           // معرف الترم (term_1, term_2, إلخ)
   date: string;
   biblePassage: string;
   servantName: string;

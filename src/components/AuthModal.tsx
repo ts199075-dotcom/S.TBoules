@@ -105,10 +105,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const registeredName = newUser.name;
         resetAllFields();
         setSuccessPendingUser(registeredName);
-        switchUserById(newUser.id);
-        if (onLoginSuccess && newUser.role) {
-          onLoginSuccess(newUser.role);
-        }
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : 'تعذر إرسال الطلب.');
       } finally {

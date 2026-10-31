@@ -22,8 +22,10 @@ import {
   LogOut,
   Edit,
   X,
+  BookMarked,
 } from 'lucide-react';
 import { QrAttendanceModal } from './QrAttendanceModal';
+import { LibrarySection } from './admin/LibrarySection';
 import { BibleSession, ClassId, UserProfile } from '../types';
 import { sessionTotal } from '../lib/scores';
 
@@ -36,6 +38,9 @@ export const ServantDashboard: React.FC = () => {
     grades,
     servantSubmissions,
     lessonPosts,
+    libraryBooks,
+    addLibraryBook,
+    deleteLibraryBook,
     submitServantCheckIn,
     createLessonPost,
     saveSessionGrade,
@@ -43,6 +48,8 @@ export const ServantDashboard: React.FC = () => {
     getStudentSessionGrades,
     logout,
   } = useApp();
+
+  const [activeServantTab, setActiveServantTab] = useState<'class_management' | 'library'>('class_management');
 
   const servantClassId = currentUser?.classId || 'prep_2_3';
   const classObj = classes.find((c) => c.id === servantClassId) || classes[4];
@@ -319,20 +326,56 @@ export const ServantDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Post Success Notice */}
-      {postSuccessNotice && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            <div>
-              <strong>تم إرسال المادة التعليمية بنجاح!</strong> كما طلبت، المنشور الآن في حالة <strong className="underline">«قيد المراجعة»</strong> ولن يظهر للطلاب إلا بعد موافقة واعتماد الأدمن المسؤول.
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Servant Section Tabs: Class Management vs Church Library */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <button
+          onClick={() => setActiveServantTab('class_management')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeServantTab === 'class_management'
+              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 text-amber-500" />
+          <span>إدارة الفصل ودرجات الطلاب وتحضير الدرس</span>
+        </button>
 
-      {/* Main Submission Form: Pre-meeting Readiness (الحضور والتحضير) */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+        <button
+          onClick={() => setActiveServantTab('library')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            activeServantTab === 'library'
+              ? 'bg-slate-900 dark:bg-amber-600 text-amber-300 dark:text-white shadow-xs'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+          }`}
+        >
+          <BookMarked className="w-4 h-4 text-amber-500" />
+          <span>مكتبة المراجع الكنسية وتفاسير الآباء للتحضير ({libraryBooks.length})</span>
+        </button>
+      </div>
+
+      {activeServantTab === 'library' ? (
+        <LibrarySection
+          libraryBooks={libraryBooks}
+          onAddBook={addLibraryBook}
+          onDeleteBook={deleteLibraryBook}
+          canManage={currentUser?.role === 'admin' || currentUser?.role === 'assistant'}
+        />
+      ) : (
+        <>
+          {/* Post Success Notice */}
+          {postSuccessNotice && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div>
+                  <strong>تم إرسال المادة التعليمية بنجاح!</strong> كما طلبت، المنشور الآن في حالة <strong className="underline">«قيد المراجعة»</strong> ولن يظهر للطلاب إلا بعد موافقة واعتماد الأدمن المسؤول.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main Submission Form: Pre-meeting Readiness (الحضور والتحضير) */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -1050,6 +1093,8 @@ export const ServantDashboard: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {/* QR Attendance Modal */}

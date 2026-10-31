@@ -29,7 +29,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const studyPillars = [
     {
       title: 'البعد المسياني',
-      subtitle: 'رؤية شخص ربنا يسوع المسيح ورموزه ونبواته في كل أسفار الكتاب المقدس',
+      subtitle: 'رؤية شخص ربنا يسوع المسيح ورموزه ونبوءاته في أسفار العهد القديم',
       icon: '✝️',
     },
     {

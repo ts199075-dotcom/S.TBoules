@@ -112,10 +112,13 @@ export const StudentDashboard: React.FC = () => {
   const classSessions = sessions.filter((s) => s.classId === currentUser.classId);
   const latestSession = classSessions[classSessions.length - 1] || sessions[0];
 
-  // Approved posts STRICTLY targeted for this student's class only
-  const classApprovedPosts = lessonPosts.filter(
-    (p) => p.classId === currentUser.classId && p.status === 'approved'
-  );
+  // Approved posts targeted for this student's class or school-wide (User Request)
+  const classApprovedPosts = lessonPosts.filter((p) => {
+    if (p.status !== 'approved') return false;
+    if (p.targetAudience === 'servants_only') return false;
+    if (p.targetScope === 'all_classes') return true;
+    return p.classId === currentUser.classId;
+  });
 
   // Analysis of lost marks
   let totalLostExam = 0;

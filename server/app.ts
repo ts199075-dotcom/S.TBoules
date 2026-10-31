@@ -3,6 +3,7 @@ import {
   AppNotification,
   BibleSession,
   ClassId,
+  LibraryBook,
   ServantLessonPost,
   SessionGrade,
   UserProfile,
@@ -74,16 +75,29 @@ function statePayload(db: DbShape, user: UserProfile | null) {
     currentUser: user ? stripUser(user) : null,
     users: db.users.map(stripUser),
     classes: CLASSES_LIST,
+    academicTerms: db.academicTerms || [],
     sessions: db.sessions.map((s) => sessionForRole(s, user?.role)),
     grades: db.grades,
     finalExamScores: db.finalExamScores,
     servantSubmissions: db.servantSubmissions,
     notifications: filterNotifications(db, user),
-    lessonPosts: db.lessonPosts.filter((p) => {
-      if (!user) return p.status === 'approved';
+    libraryBooks: db.libraryBooks || [],
+    yearWorkApprovedClasses: db.yearWorkApprovedClasses || {},
+    lessonPosts: (db.lessonPosts || []).filter((p) => {
+      if (!user) {
+        return p.status === 'approved' && (!p.targetAudience || p.targetAudience === 'all');
+      }
       if (user.role === 'admin' || user.role === 'assistant') return true;
-      if (user.role === 'servant') return p.servantId === user.id || p.status === 'approved';
-      return p.status === 'approved' && p.classId === user.classId;
+      if (user.role === 'servant') {
+        if (p.servantId === user.id) return true;
+        if (p.status !== 'approved') return false;
+        return !p.targetAudience || p.targetAudience === 'all' || p.targetAudience === 'servants_only';
+      }
+      // Students:
+      if (p.status !== 'approved') return false;
+      if (p.targetAudience === 'servants_only') return false;
+      if (p.targetScope === 'all_classes') return true;
+      return p.classId === user.classId;
     }),
   };
 }
@@ -181,7 +195,7 @@ function validateRegister(body: Record<string, unknown>) {
 export function createApiApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '512kb' }));
+  app.use(express.json({ limit: '25mb' }));
 
   app.use((req, res, next) => {
     const origin = req.headers.origin;
@@ -211,6 +225,15 @@ export function createApiApp() {
       if (!found) return { status: 404, message: 'لم يتم العثور على حساب بهذا البريد أو رقم الهاتف.' };
       if (found.status === 'rejected') {
         return { status: 403, message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.' };
+      }
+      if (found.status === 'pending') {
+        return {
+          status: 403,
+          message:
+            found.role === 'servant'
+              ? 'حساب الخادم قيد المراجعة والموافقة من قِبل أمين الخدمة. برجاء الانتظار حتى يتم اعتماد الحساب.'
+              : 'طلب التحاق المخدوم قيد المراجعة والاعتماد من أمين الخدمة. سيتم التفعيل قريباً.',
+        };
       }
       const expected = found.password || found.phone;
       const ok = found.password ? verifyPassword(password, found.password) : expected === password;
@@ -389,6 +412,7 @@ export function createApiApp() {
         sessionTitle: session.title,
         date: session.date,
         studentId,
+        termId: session.termId || req.body?.termId || prev?.termId || 'term_1',
         exam: clamp(Number(req.body.exam ?? prev?.exam ?? 0), 0, 10),
         homework: clamp(Number(req.body.homework ?? prev?.homework ?? 0), 0, 10),
         attendance: clamp(Number(req.body.attendance ?? prev?.attendance ?? 0), 0, 1),
@@ -439,6 +463,7 @@ export function createApiApp() {
       if (existingIdx >= 0) {
         db.grades[existingIdx] = {
           ...db.grades[existingIdx],
+          termId: session.termId || db.grades[existingIdx].termId || 'term_1',
           attendance: 1,
           qrAttendedAt: timeString,
         };
@@ -449,6 +474,7 @@ export function createApiApp() {
           sessionTitle: session.title,
           date: session.date,
           studentId: actor.id,
+          termId: session.termId || 'term_1',
           exam: 0,
           homework: 0,
           attendance: 1,
@@ -513,6 +539,7 @@ export function createApiApp() {
       const newSession: BibleSession = {
         title,
         classId,
+        termId: String(req.body?.termId || 'term_1'),
         date: String(req.body?.date || todayIso()),
         biblePassage: String(req.body?.biblePassage || 'شواهد مختارة'),
         servantName: String(req.body?.servantName || req.user?.name || 'أمانة الخدمة'),
@@ -544,6 +571,7 @@ export function createApiApp() {
         prepBibleVerse: status === 'attending' ? String(req.body?.prepBibleVerse || '') : undefined,
         prepAttachmentName: status === 'attending' ? String(req.body?.prepAttachmentName || '') : undefined,
         prepAttachmentType: req.body?.prepAttachmentType,
+        prepAttachmentData: req.body?.prepAttachmentData ? String(req.body.prepAttachmentData) : undefined,
         prepNotes: status === 'attending' ? String(req.body?.prepNotes || '') : undefined,
         submittedAt: new Date().toLocaleString('ar-EG'),
         viewedByAdmin: false,
@@ -584,10 +612,14 @@ export function createApiApp() {
         bibleVerse: String(req.body?.bibleVerse || ''),
         content,
         attachmentName: String(req.body?.attachmentName || '') || undefined,
+        fileData: req.body?.fileData ? String(req.body.fileData) : undefined,
+        fileType: req.body?.fileType ? String(req.body.fileType) : undefined,
         createdAt: todayIso(),
         status: isAdmin ? 'approved' : 'pending_approval',
         approvedBy: isAdmin ? currentUser.name : undefined,
         approvedAt: isAdmin ? todayIso() : undefined,
+        targetAudience: req.body?.targetAudience || 'all',
+        targetScope: req.body?.targetScope || 'specific_class',
       };
       db.lessonPosts.unshift(post);
       pushNotif(db, {
@@ -691,6 +723,136 @@ export function createApiApp() {
       success: true,
       leaderboard: computeClassLeaderboard(classId, db.users, db.sessions, db.grades, db.finalExamScores),
     });
+  });
+
+  // Library endpoints
+  app.get('/api/library', (_req, res) => {
+    const db = loadDb();
+    res.json({ success: true, books: db.libraryBooks || [] });
+  });
+
+  app.post('/api/library', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const title = String(req.body?.title || '').trim();
+    const author = String(req.body?.author || '').trim();
+    if (!title || !author) return jsonError(res, 400, 'عنوان الكتاب واسم الكاتب/الأب مطلوبان.');
+
+    const result = await withDb((db) => {
+      const newBook: LibraryBook = {
+        id: `book-${Date.now()}`,
+        title,
+        author,
+        category: req.body?.category || 'old_testament',
+        description: String(req.body?.description || '').trim(),
+        targetClassId: req.body?.targetClassId || 'all_classes',
+        fileName: String(req.body?.fileName || '').trim() || undefined,
+        fileData: req.body?.fileData ? String(req.body.fileData) : undefined,
+        fileType: req.body?.fileType ? String(req.body.fileType) : undefined,
+        fileSize: String(req.body?.fileSize || '3.5 MB'),
+        pageCount: Number(req.body?.pageCount) || undefined,
+        downloadUrl: String(req.body?.downloadUrl || '').trim() || undefined,
+        addedBy: req.user?.name || 'أمين الخدمة',
+        addedAt: todayIso(),
+      };
+      db.libraryBooks = [newBook, ...(db.libraryBooks || [])];
+      pushNotif(db, {
+        title: 'مرجع كنسي جديد في المكتبة',
+        message: `أضاف أمين الخدمة كتاباً جديداً: "${title}" (${author}).`,
+        type: 'post_approved',
+        audienceRoles: ['admin', 'assistant', 'servant'],
+      });
+      return { status: 200, book: newBook, state: statePayload(db, req.user || null) };
+    });
+    res.json({ success: true, ...result.state });
+  });
+
+  app.delete('/api/library/:id', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const result = await withDb((db) => {
+      db.libraryBooks = (db.libraryBooks || []).filter((b) => b.id !== req.params.id);
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
+    res.json({ success: true, ...result.state });
+  });
+
+  // Academic Terms Management (نظام التيرمات والفصول الدراسية)
+  app.post('/api/terms', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const title = String(req.body?.title || '').trim();
+    const bookSubject = String(req.body?.bookSubject || '').trim();
+    if (!title || !bookSubject) return jsonError(res, 400, 'اسم الترم والسفر المقرر مطلوبان.');
+
+    const result = await withDb((db) => {
+      const newTerm = {
+        id: `term_${Date.now()}`,
+        title,
+        bookSubject,
+        description: String(req.body?.description || `دراسة متعمقة في ${bookSubject}`),
+        sessionsCount: 8,
+        isCurrent: Boolean(req.body?.isCurrent),
+        startDate: String(req.body?.startDate || todayIso()),
+      };
+      if (newTerm.isCurrent) {
+        db.academicTerms.forEach((t) => {
+          t.isCurrent = false;
+        });
+      }
+      db.academicTerms.push(newTerm);
+      pushNotif(db, {
+        title: 'اعتماد تيرم دراسي جديد',
+        message: `تم اعتماد "${title}" لدراسة (${bookSubject}) لجميع الفصول الدراسية.`,
+        type: 'post_approved',
+        audienceRoles: ['admin', 'assistant', 'servant', 'student'],
+      });
+      return { status: 200, term: newTerm, state: statePayload(db, req.user || null) };
+    });
+    res.json({ success: true, ...result.state });
+  });
+
+  // Admin user management actions
+  app.post('/api/users/action', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const action = req.body?.action;
+    const result = await withDb((db) => {
+      if (action === 'addStudent') {
+        const s = req.body.student || {};
+        const newStudent: UserProfile = {
+          id: `stud-${Date.now()}`,
+          name: String(s.name || '').trim(),
+          phone: String(s.phone || '').trim(),
+          age: Number(s.age || 10),
+          role: 'student',
+          status: 'active',
+          classId: s.classId || 'primary_4',
+          guardianPhone: String(s.guardianPhone || '').trim() || undefined,
+          confessionFather: String(s.confessionFather || '').trim() || undefined,
+          registeredAt: todayIso(),
+        };
+        db.users.unshift(newStudent);
+      } else if (action === 'changeClass') {
+        const u = db.users.find((user) => user.id === req.body.userId);
+        if (u) u.classId = req.body.newClassId;
+      } else if (action === 'updateServant') {
+        const u = db.users.find((user) => user.id === req.body.userId);
+        if (u) {
+          if (req.body.role) u.role = req.body.role;
+          if (req.body.classId !== undefined) u.classId = req.body.classId;
+        }
+      }
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    res.json({ success: true, ...result.state });
+  });
+
+  // Year work lock calculation toggle
+  app.post('/api/year-work-lock', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const classId = req.body?.classId;
+    const locked = Boolean(req.body?.locked);
+    const result = await withDb((db) => {
+      if (classId) {
+        db.yearWorkApprovedClasses = db.yearWorkApprovedClasses || {};
+        db.yearWorkApprovedClasses[classId] = locked;
+      }
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    res.json({ success: true, ...result.state });
   });
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
