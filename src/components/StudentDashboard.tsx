@@ -30,6 +30,8 @@ export const StudentDashboard: React.FC = () => {
   const {
     currentUser,
     classes,
+    academicTerms,
+    currentTermId,
     sessions,
     grades,
     lessonPosts,
@@ -40,6 +42,7 @@ export const StudentDashboard: React.FC = () => {
     logout,
   } = useApp();
 
+  const [selectedTermId, setSelectedTermId] = useState<string>(currentTermId || 'term_1');
   const [showCertificate, setShowCertificate] = useState(false);
   const [qrModalSession, setQrModalSession] = useState<BibleSession | null>(null);
 
@@ -103,14 +106,17 @@ export const StudentDashboard: React.FC = () => {
     );
   }
 
-  // Active student view
-  const studentGrades = getStudentSessionGrades(currentUser.id);
-  const summary = getStudentScoreSummary(currentUser.id);
+  // Active student view with Academic Term isolation
+  const allStudentGrades = getStudentSessionGrades(currentUser.id);
+  const activeTerm = academicTerms.find((t) => t.id === selectedTermId) || academicTerms[0];
+  const summary = getStudentScoreSummary(currentUser.id, selectedTermId);
   const classObj = classes.find((c) => c.id === currentUser.classId) || classes[4];
-  const leaderboard = currentUser.classId ? getClassLeaderboard(currentUser.classId) : [];
+  const leaderboard = currentUser.classId ? getClassLeaderboard(currentUser.classId, selectedTermId) : [];
   const currentRank = leaderboard.findIndex((s) => s.studentId === currentUser.id) + 1;
   const classSessions = sessions.filter((s) => s.classId === currentUser.classId);
-  const latestSession = classSessions[classSessions.length - 1] || sessions[0];
+  const termSessions = classSessions.filter((s) => (s.termId || 'term_1') === selectedTermId);
+  const termStudentGrades = allStudentGrades.filter((g) => (g.termId || 'term_1') === selectedTermId);
+  const latestSession = termSessions[termSessions.length - 1] || classSessions[classSessions.length - 1] || sessions[0];
 
   // Approved posts targeted for this student's class or school-wide (User Request)
   const classApprovedPosts = lessonPosts.filter((p) => {
@@ -120,7 +126,7 @@ export const StudentDashboard: React.FC = () => {
     return p.classId === currentUser.classId;
   });
 
-  // Analysis of lost marks
+  // Analysis of lost marks in this term
   let totalLostExam = 0;
   let totalLostHomework = 0;
   let totalLostAttendance = 0;
@@ -128,7 +134,7 @@ export const StudentDashboard: React.FC = () => {
   let totalLostPrayer = 0;
   let totalLostTools = 0;
 
-  studentGrades.forEach((g: SessionGrade) => {
+  termStudentGrades.forEach((g: SessionGrade) => {
     totalLostExam += 10 - Number(g.exam || 0);
     totalLostHomework += 10 - Number(g.homework || 0);
     totalLostAttendance += 1 - Number(g.attendance || 0);
@@ -204,6 +210,71 @@ export const StudentDashboard: React.FC = () => {
             <LogOut className="w-4 h-4 text-rose-400" />
             <span>خروج</span>
           </button>
+        </div>
+      </div>
+
+      {/* ACADEMIC TERM SELECTOR (نظام التيرمات المتتابعة المقررة) */}
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
+            <div>
+              <h3 className="font-black text-sm text-slate-900 dark:text-slate-100">
+                نظام التيرمات والأسفار الدراسية المقررة
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                اختر الترم الدراسي لعرض درجات حصصه الـ 8 المستقلة، وتحليل درجاته وشهادة إتمامه:
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-amber-900 dark:text-amber-300 font-bold bg-amber-100/80 dark:bg-amber-950/80 px-3 py-1 rounded-full border border-amber-300/50">
+            السفر المعروض حالياً: 📖 {activeTerm.bookSubject} (8 حصص)
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {academicTerms.map((term) => {
+            const isSelected = selectedTermId === term.id;
+            const termGradeCount = allStudentGrades.filter(
+              (g) => (g.termId || 'term_1') === term.id
+            ).length;
+
+            return (
+              <button
+                key={term.id}
+                type="button"
+                onClick={() => setSelectedTermId(term.id)}
+                className={`p-4 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                  isSelected
+                    ? 'bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 font-black border-amber-600 shadow-md scale-[1.01]'
+                    : 'bg-slate-50 dark:bg-slate-800/60 hover:bg-amber-50/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold">{term.title}</span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      isSelected
+                        ? 'bg-slate-950 text-amber-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {termGradeCount} / 8 حصص مرصودة
+                  </span>
+                </div>
+                <div
+                  className={`text-base font-black ${
+                    isSelected ? 'text-slate-950' : 'text-amber-700 dark:text-amber-400'
+                  }`}
+                >
+                  📖 {term.bookSubject}
+                </div>
+                <div className={`text-[11px] ${isSelected ? 'text-slate-900/80 font-semibold' : 'text-slate-400'}`}>
+                  {term.description}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -404,13 +475,13 @@ export const StudentDashboard: React.FC = () => {
           </div>
 
           <span className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-            عدد اللقاءات المرصودة: {studentGrades.length}
+            عدد اللقاءات المرصودة في هذا الترم: {termStudentGrades.length} من 8
           </span>
         </div>
 
-        {studentGrades.length === 0 ? (
+        {termStudentGrades.length === 0 ? (
           <div className="p-8 text-center text-slate-500 text-xs">
-            لم يتم رصد درجات للقاءات حتى الآن، فور إدخال درجاتك ستظهر هنا فوراً.
+            لم يتم رصد درجات للقاءات هذا الترم ({activeTerm.title}: {activeTerm.bookSubject}) حتى الآن.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -429,7 +500,7 @@ export const StudentDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {studentGrades.map((g: SessionGrade) => {
+                {termStudentGrades.map((g: SessionGrade) => {
                   const sessionTotal =
                     Number(g.exam || 0) +
                     Number(g.homework || 0) +
@@ -564,6 +635,8 @@ export const StudentDashboard: React.FC = () => {
           gradedSessionsCount={summary.gradedSessionsCount}
           isCalculated={summary.isCalculated}
           rank={currentRank}
+          termTitle={activeTerm.title}
+          bookSubject={activeTerm.bookSubject}
           onClose={() => setShowCertificate(false)}
         />
       )}

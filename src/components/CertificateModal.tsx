@@ -10,6 +10,8 @@ interface CertificateModalProps {
   gradedSessionsCount: number;
   isCalculated: boolean;
   rank?: number;
+  termTitle?: string;
+  bookSubject?: string;
   onClose: () => void;
 }
 
@@ -20,6 +22,8 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   gradedSessionsCount,
   isCalculated,
   rank,
+  termTitle,
+  bookSubject,
   onClose,
 }) => {
   const isCompleted8Sessions = gradedSessionsCount >= 8 && isCalculated;
@@ -146,7 +150,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
 
             <div className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 max-w-xl mx-auto leading-relaxed space-y-1.5">
               <p>
-                قد أتمّ بنجاح حضور ودراسة كورس الكتاب المقدس كاملاً بمجموع <strong className="text-stone-900 dark:text-white font-black">(٨ حصص دراسية)</strong> بفصل: <strong className="text-amber-800 dark:text-amber-400">{className}</strong>
+                قد أتمّ بنجاح حضور ودراسة كورس الكتاب المقدس {termTitle ? `(${termTitle}${bookSubject ? ` - دراسة ${bookSubject}` : ''})` : ''} بمجموع <strong className="text-stone-900 dark:text-white font-black">(٨ حصص دراسية)</strong> بفصل: <strong className="text-amber-800 dark:text-amber-400">{className}</strong>
               </p>
               <div className="p-3 bg-amber-100/70 dark:bg-stone-800/90 rounded-2xl border border-amber-300 dark:border-stone-700 inline-block px-6">
                 <span className="text-xs text-stone-600 dark:text-stone-400">وحصل في أعمال السنة على درجة: </span>

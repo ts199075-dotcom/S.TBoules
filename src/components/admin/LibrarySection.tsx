@@ -12,6 +12,7 @@ import {
   Sparkles,
   X,
   CheckCircle,
+  CheckCircle2,
   Upload,
   Eye,
   FileUp,
@@ -60,6 +61,19 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
   const [uploadedFileType, setUploadedFileType] = useState<string>('');
   const [uploadedFileSize, setUploadedFileSize] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Book Delete State
+  const [bookToDelete, setBookToDelete] = useState<LibraryBook | null>(null);
+  const [deleteBookSuccessMsg, setDeleteBookSuccessMsg] = useState<string | null>(null);
+
+  const handleConfirmDeleteBook = () => {
+    if (!bookToDelete) return;
+    const title = bookToDelete.title;
+    onDeleteBook(bookToDelete.id);
+    setBookToDelete(null);
+    setDeleteBookSuccessMsg(`تم حذف كتاب «${title}» نهائياً من المكتبة وقاعدة البيانات بنجاح ✅`);
+    setTimeout(() => setDeleteBookSuccessMsg(null), 4000);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,6 +148,23 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
 
   return (
     <div className="space-y-6 text-right">
+      {/* Toast Alert: Delete Book Success */}
+      {deleteBookSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500 text-white font-bold text-xs shadow-lg flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            <span>{deleteBookSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteBookSuccessMsg(null)}
+            className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner / Hero Card */}
       <div className="bg-gradient-to-l from-amber-900 via-stone-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 border border-amber-800/40 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -364,12 +395,9 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
 
                       {canManage && (
                         <button
-                          onClick={() => {
-                            if (window.confirm(`هل أنت متأكد من حذف كتاب "${book.title}" من المكتبة؟`)) {
-                              onDeleteBook(book.id);
-                            }
-                          }}
-                          className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                          type="button"
+                          onClick={() => setBookToDelete(book)}
+                          className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center cursor-pointer transition-colors shrink-0"
                           title="حذف هذا الكتاب من المكتبة"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -575,6 +603,58 @@ export const LibrarySection: React.FC<LibrarySectionProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL: DELETE BOOK PERMANENTLY */}
+      {bookToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs animate-fade-in">
+          <div className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-4 text-right">
+            <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <Trash2 className="w-5 h-5 shrink-0" />
+                <h3 className="font-bold text-sm text-stone-900 dark:text-stone-100">
+                  تأكيد حذف الكتاب من المكتبة
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBookToDelete(null)}
+                className="w-7 h-7 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-stone-500"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-2xl text-xs space-y-1.5 text-rose-900 dark:text-rose-200">
+              <div>الكتاب المراد حذفه: <strong className="text-base text-stone-950 dark:text-white block mt-0.5">{bookToDelete.title}</strong></div>
+              <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                الكاتب/الأب: {bookToDelete.author} | الحجم: {bookToDelete.fileSize || 'ملف كتابي'}
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+              ⚠️ هل أنت متأكد من حذف هذا المرجع الكنسي نهائياً من المكتبة؟ سيتم إزالته فوراً من قاعدة البيانات ولن يظهر للخدام بعد الآن.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100 dark:border-stone-800">
+              <button
+                type="button"
+                onClick={() => setBookToDelete(null)}
+                className="px-4 py-2 rounded-xl text-stone-600 dark:text-stone-400 font-bold hover:bg-stone-100 dark:hover:bg-stone-800 text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteBook}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>نعم، حذف المرجع الآن 🗑️</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

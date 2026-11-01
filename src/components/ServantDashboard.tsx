@@ -23,6 +23,7 @@ import {
   Edit,
   X,
   BookMarked,
+  Trash2,
 } from 'lucide-react';
 import { QrAttendanceModal } from './QrAttendanceModal';
 import { LibrarySection } from './admin/LibrarySection';
@@ -41,6 +42,7 @@ export const ServantDashboard: React.FC = () => {
     libraryBooks,
     addLibraryBook,
     deleteLibraryBook,
+    deleteLessonPost,
     submitServantCheckIn,
     createLessonPost,
     saveSessionGrade,
@@ -78,7 +80,7 @@ export const ServantDashboard: React.FC = () => {
   const [attachmentName, setAttachmentName] = useState(
     currentSubmission?.prepAttachmentName || 'مذكرة_تحضير_أعمال_الرسل_الأسبوع_القادم.pdf'
   );
-  const [attachmentType, setAttachmentType] = useState<'pdf' | 'document' | 'notes'>(
+  const [attachmentType, setAttachmentType] = useState<'pdf' | 'document' | 'notes' | 'image'>(
     currentSubmission?.prepAttachmentType || 'pdf'
   );
   const [prepNotes, setPrepNotes] = useState(
@@ -617,6 +619,19 @@ export const ServantDashboard: React.FC = () => {
                   <p className="text-slate-600 dark:text-slate-400 text-[11px] line-clamp-2">
                     {post.content}
                   </p>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800 text-[10px]">
+                    <span className="text-slate-400 font-mono">📅 {post.createdAt}</span>
+                    <button
+                      type="button"
+                      onClick={() => deleteLessonPost(post.id)}
+                      className="text-rose-600 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 font-bold cursor-pointer"
+                      title="حذف هذا المنشور"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>حذف</span>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

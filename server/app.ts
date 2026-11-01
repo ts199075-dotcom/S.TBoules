@@ -376,7 +376,7 @@ export function createApiApp() {
     res.json({ success: true, ...result.state });
   });
 
-  app.delete('/api/users/:id', requireAuth, requireRoles(['admin']), async (req: AuthedRequest, res) => {
+  app.delete('/api/users/:id', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
     const result = await withDb((db) => {
       const target = db.users.find((u) => u.id === req.params.id);
       if (!target) return { status: 404, message: 'المستخدم غير موجود.' };
@@ -385,6 +385,7 @@ export function createApiApp() {
       db.grades = db.grades.filter((g) => g.studentId !== req.params.id);
       delete db.finalExamScores[req.params.id];
       db.authSessions = db.authSessions.filter((s) => s.userId !== req.params.id);
+      db.servantSubmissions = db.servantSubmissions.filter((s) => s.servantId !== req.params.id);
       return { status: 200, state: statePayload(db, req.user || null) };
     });
     if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
@@ -554,6 +555,16 @@ export function createApiApp() {
     res.json({ success: true, session: result.session, ...result.state });
   });
 
+  app.delete('/api/sessions/:id', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const result = await withDb((db) => {
+      db.sessions = db.sessions.filter((s) => s.id !== req.params.id);
+      db.grades = db.grades.filter((g) => g.sessionId !== req.params.id);
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    if (result.status !== 200) return jsonError(res, result.status, (result as any).message || 'فشل');
+    res.json({ success: true, ...result.state });
+  });
+
   app.post('/api/servant/check-in', requireAuth, requireRoles(['servant', 'assistant', 'admin']), async (req: AuthedRequest, res) => {
     const status: 'absent' | 'attending' = req.body?.status === 'absent' ? 'absent' : 'attending';
     const result = await withDb((db) => {
@@ -667,6 +678,21 @@ export function createApiApp() {
     res.json({ success: true, ...result.state });
   });
 
+  app.delete('/api/posts/:id', requireAuth, requireRoles(['admin', 'assistant', 'servant']), async (req: AuthedRequest, res) => {
+    const result = await withDb((db) => {
+      const post = db.lessonPosts.find((p) => p.id === req.params.id);
+      if (!post) return { status: 404, message: 'المنشور غير موجود.' };
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'assistant';
+      if (!isAdmin && post.servantId !== req.user?.id) {
+        return { status: 403, message: 'لا يمكنك حذف منشور خادم آخر.' };
+      }
+      db.lessonPosts = db.lessonPosts.filter((p) => p.id !== req.params.id);
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
+    res.json({ success: true, ...result.state });
+  });
+
   app.post('/api/notifications/:id/read', requireAuth, async (req: AuthedRequest, res) => {
     const result = await withDb((db) => {
       const n = db.notifications.find((item) => item.id === req.params.id);
@@ -770,7 +796,7 @@ export function createApiApp() {
       db.libraryBooks = (db.libraryBooks || []).filter((b) => b.id !== req.params.id);
       return { status: 200, state: statePayload(db, req.user || null) };
     });
-    if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
+    if (result.status !== 200) return jsonError(res, result.status, (result as any).message || 'فشل');
     res.json({ success: true, ...result.state });
   });
 
@@ -834,6 +860,16 @@ export function createApiApp() {
         if (u) {
           if (req.body.role) u.role = req.body.role;
           if (req.body.classId !== undefined) u.classId = req.body.classId;
+        }
+      } else if (action === 'delete' || action === 'deleteUser') {
+        const targetId = String(req.body.userId || req.body.id || '');
+        const target = db.users.find((u) => u.id === targetId);
+        if (target && target.role !== 'admin') {
+          db.users = db.users.filter((u) => u.id !== targetId);
+          db.grades = db.grades.filter((g) => g.studentId !== targetId);
+          delete db.finalExamScores[targetId];
+          db.authSessions = db.authSessions.filter((s) => s.userId !== targetId);
+          db.servantSubmissions = db.servantSubmissions.filter((s) => s.servantId !== targetId);
         }
       }
       return { status: 200, state: statePayload(db, req.user || null) };

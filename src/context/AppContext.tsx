@@ -58,6 +58,8 @@ interface AppContextType {
   rejectUser: (userId: string) => void;
   toggleAssistantRole: (userId: string) => void;
   deleteUser: (userId: string) => void;
+  deleteSession: (sessionId: string) => void;
+  deleteLessonPost: (postId: string) => void;
   saveSessionGrade: (gradeData: Partial<SessionGrade> & { studentId: string; sessionId: string }) => void;
   recordQrAttendance: (
     studentId: string,
@@ -417,11 +419,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteUser = (userId: string) => {
-    if (backendStatus === 'online') {
-      void remote(`/api/users/${userId}`, { method: 'DELETE' });
-      return;
-    }
     setUsers((prev) => prev.filter((u) => u.id !== userId));
+    setGrades((prev) => prev.filter((g) => g.studentId !== userId));
+    setFinalExamScores((prev) => {
+      const copy = { ...prev };
+      delete copy[userId];
+      return copy;
+    });
+    setServantSubmissions((prev) => prev.filter((s) => s.servantId !== userId));
+
+    if (backendStatus === 'online') {
+      void remote(`/api/users/${userId}`, { method: 'DELETE' }).catch(() => {
+        void remote('/api/users/action', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'delete', userId }),
+        });
+      });
+    }
+  };
+
+  const deleteSession = (sessionId: string) => {
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    setGrades((prev) => prev.filter((g) => g.sessionId !== sessionId));
+    if (backendStatus === 'online') {
+      void remote(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    }
+  };
+
+  const deleteLessonPost = (postId: string) => {
+    setLessonPosts((prev) => prev.filter((p) => p.id !== postId));
+    if (backendStatus === 'online') {
+      void remote(`/api/posts/${postId}`, { method: 'DELETE' });
+    }
   };
 
   const addStudentByAdmin = async (studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => {
@@ -625,7 +654,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     prepTitle?: string;
     prepBibleVerse?: string;
     prepAttachmentName?: string;
-    prepAttachmentType?: 'document' | 'pdf' | 'notes';
+    prepAttachmentType?: 'document' | 'pdf' | 'notes' | 'image';
+    prepAttachmentData?: string;
     prepNotes?: string;
   }) => {
     if (!currentUser) return;
@@ -729,11 +759,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteLibraryBook = (bookId: string) => {
+    setLibraryBooks((prev) => prev.filter((b) => b.id !== bookId));
     if (backendStatus === 'online') {
       void remote(`/api/library/${bookId}`, { method: 'DELETE' });
-      return;
     }
-    setLibraryBooks((prev) => prev.filter((b) => b.id !== bookId));
   };
 
   const addAcademicTerm = async (termData: Omit<AcademicTerm, 'id'>): Promise<AcademicTerm> => {
@@ -867,6 +896,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         rejectUser,
         toggleAssistantRole,
         deleteUser,
+        deleteSession,
+        deleteLessonPost,
         saveSessionGrade,
         recordQrAttendance,
         toggleSessionQr,

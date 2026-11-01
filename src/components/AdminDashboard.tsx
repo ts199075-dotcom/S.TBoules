@@ -69,6 +69,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     rejectUser,
     toggleAssistantRole,
     deleteUser,
+    deleteSession,
+    deleteLessonPost,
     addStudentByAdmin,
     changeStudentClass,
     updateServantProfile,
@@ -747,6 +749,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* Class Sessions Pill List with Delete */}
+            {sessions.filter((s) => s.classId === selectedClassId).length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">لقاءات هذا الفصل:</span>
+                {sessions
+                  .filter((s) => s.classId === selectedClassId)
+                  .map((s) => (
+                    <div
+                      key={s.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold shadow-2xs"
+                    >
+                      <span>📅 {s.title} ({s.date})</span>
+                      <button
+                        type="button"
+                        onClick={() => deleteSession(s.id)}
+                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/60 p-0.5 rounded cursor-pointer transition-colors"
+                        title="حذف هذا اللقاء ودرجاته"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+
             {/* Students Table */}
             {users.filter((u) => u.role === 'student' && u.classId === selectedClassId && u.status === 'active').length === 0 ? (
               <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs">
@@ -1380,6 +1407,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
 
                       <div className="pt-2 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => deleteLessonPost(post.id)}
+                          className="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                          title="حذف هذا المنشور نهائياً من السيستم"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>حذف نهائي</span>
+                        </button>
+
                         <button
                           onClick={() => rejectLessonPost(post.id)}
                           className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-rose-600 hover:text-white text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"

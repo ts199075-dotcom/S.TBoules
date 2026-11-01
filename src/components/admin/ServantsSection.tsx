@@ -18,6 +18,7 @@ import {
   Award,
   AlertCircle,
   Clock,
+  Trash2,
 } from 'lucide-react';
 
 interface ServantsSectionProps {
@@ -48,6 +49,20 @@ export const ServantsSection: React.FC<ServantsSectionProps> = ({
   const [editRole, setEditRole] = useState<'servant' | 'assistant'>('servant');
   const [editClassId, setEditClassId] = useState<ClassId>('prep_2_3');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+
+  // Servant Delete State
+  const [servantToDelete, setServantToDelete] = useState<UserProfile | null>(null);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
+
+  const handleConfirmDeleteServant = () => {
+    if (!servantToDelete) return;
+    const name = servantToDelete.name;
+    deleteUser(servantToDelete.id);
+    setServantToDelete(null);
+    setSelectedServant(null);
+    setDeleteSuccessMsg(`تم حذف حساب الخادم «${name}» نهائياً من السيستم ✅`);
+    setTimeout(() => setDeleteSuccessMsg(null), 4000);
+  };
 
   // Filter servants and assistants
   const allServants = users.filter((u) => u.role === 'servant' || u.role === 'assistant');
@@ -89,6 +104,23 @@ export const ServantsSection: React.FC<ServantsSectionProps> = ({
 
   return (
     <div className="space-y-6 text-right" dir="rtl">
+      {/* Toast Alert: Servant Delete Success */}
+      {deleteSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500 text-white font-bold text-xs shadow-lg flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            <span>{deleteSuccessMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteSuccessMsg(null)}
+            className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Header Card */}
       <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 border border-stone-200 dark:border-stone-800 shadow-xs space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-100 dark:border-stone-800 pb-5">
@@ -263,9 +295,22 @@ export const ServantsSection: React.FC<ServantsSectionProps> = ({
                   <span className="text-amber-700 dark:text-amber-400 font-bold group-hover:underline">
                     فتح الصفحة والملف الشخصي ←
                   </span>
-                  <span className="text-stone-400 text-[10px]">
-                    {submissions.length} تسجيلات
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[10px]">
+                      {submissions.length} تسجيلات
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setServantToDelete(servant);
+                      }}
+                      className="p-1 rounded-lg border border-rose-200 dark:border-rose-900/60 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+                      title="حذف حساب الخادم نهائياً"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -519,13 +564,74 @@ export const ServantsSection: React.FC<ServantsSectionProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-3 border-t border-stone-100 dark:border-stone-800 flex justify-end">
+            <div className="pt-3 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setServantToDelete(selectedServant)}
+                className="px-4 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 hover:bg-rose-600 hover:text-white text-rose-700 dark:text-rose-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف حساب الخادم نهائياً</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setSelectedServant(null)}
-                className="px-6 py-2 rounded-xl bg-stone-900 dark:bg-stone-800 text-white font-bold text-xs"
+                className="px-6 py-2 rounded-xl bg-stone-900 dark:bg-stone-800 text-white font-bold text-xs hover:bg-stone-800"
               >
                 إغلاق الملف الشخصي
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL: DELETE SERVANT PERMANENTLY */}
+      {servantToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs animate-fade-in">
+          <div className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-4 text-right">
+            <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <Trash2 className="w-5 h-5 shrink-0" />
+                <h3 className="font-bold text-sm text-stone-900 dark:text-stone-100">
+                  تأكيد حذف حساب الخادم نهائياً
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setServantToDelete(null)}
+                className="w-7 h-7 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-stone-500"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-2xl text-xs space-y-1.5 text-rose-900 dark:text-rose-200">
+              <div>الخادم المطلوب حذفه: <strong className="text-base text-stone-950 dark:text-white block mt-0.5">{servantToDelete.name}</strong></div>
+              <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                رقم الهاتف: <span className="font-mono">{servantToDelete.phone}</span> | الرتبة: {servantToDelete.role === 'assistant' ? 'مساعد أمين الخدمة' : 'خادم فصل'}
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+              ⚠️ <strong>تحذير:</strong> سيتم حذف حساب الخادم نهائياً ولن يتمكن من الدخول للمنصة بعد الآن، وسيتم مسح كافة سجلات حضوره وتحضيراته المرفوعة.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100 dark:border-stone-800">
+              <button
+                type="button"
+                onClick={() => setServantToDelete(null)}
+                className="px-4 py-2 rounded-xl text-stone-600 dark:text-stone-400 font-bold hover:bg-stone-100 dark:hover:bg-stone-800 text-xs"
+              >
+                إلغاء التراجع
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteServant}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>نعم، حذف نهائي الآن 🗑️</span>
               </button>
             </div>
           </div>
