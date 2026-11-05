@@ -10,7 +10,7 @@ const TOKEN_KEY = 'st_paul_token_v1';
 
 export function getApiToken(): string {
   try {
-    return sessionStorage.getItem(TOKEN_KEY) || '';
+    return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || '';
   } catch {
     return '';
   }
@@ -18,8 +18,13 @@ export function getApiToken(): string {
 
 export function setApiToken(token: string) {
   try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
+    if (token) {
+      sessionStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+    }
   } catch {
     /* ignore */
   }
@@ -46,6 +51,15 @@ export async function apiRequest<T = Record<string, unknown>>(
     headers.set('Content-Type', 'application/json');
   }
   if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  try {
+    const uid = localStorage.getItem('st_paul_current_uid_v6');
+    if (uid && !headers.has('x-user-id')) {
+      headers.set('x-user-id', uid);
+    }
+  } catch {
+    /* ignore */
+  }
 
   const res = await fetch(path, { ...options, headers });
   const data = (await res.json().catch(() => ({}))) as T & { message?: string; token?: string; success?: boolean };

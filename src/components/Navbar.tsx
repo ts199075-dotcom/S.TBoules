@@ -393,6 +393,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
                           onClick={() => {
                             logout();
                             setShowUserMenu(false);
+                            setCurrentTab('home');
                           }}
                           className="w-full text-right px-2.5 py-2 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2 cursor-pointer transition-colors"
                         >
@@ -407,7 +408,10 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
               {/* Direct Quick Logout Button in Top Bar */}
               <button
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                  setCurrentTab('home');
+                }}
                 className="flex items-center gap-1 p-1.5 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-900/60 transition-colors cursor-pointer shadow-2xs shrink-0"
                 title="تسجيل الخروج المباشر من الحساب"
               >
@@ -540,6 +544,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
                 onClick={() => {
                   logout();
                   setMobileMenuOpen(false);
+                  setCurrentTab('home');
                 }}
                 className="w-full text-right px-3 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors"
               >

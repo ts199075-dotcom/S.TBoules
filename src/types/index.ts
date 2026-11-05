@@ -152,6 +152,18 @@ export interface UserProfile {
   notes?: string;
 }
 
+export interface ClassAssignedBook {
+  classId: ClassId;
+  bookId: string;
+  bookName: string;
+  testament: 'old' | 'new';
+  termId: string;
+  assignedByServantName?: string;
+  assignedAt?: string;
+  targetSessionsCount?: number; // e.g. 2, 3, 4, 8
+  notes?: string;
+}
+
 export interface BibleSession {
   id: string;
   title: string;
@@ -163,6 +175,21 @@ export interface BibleSession {
   maxScorePerMetric: number; // 10
   qrSecretCode: string;      // The unique code embedded in the session QR
   qrActive: boolean;         // Is the QR code currently active for scanning
+
+  // Flexible curriculum fields
+  sessionNumber?: number;    // رقم الحصة في الترم (1 إلى 8)
+  bookId?: string;           // كود السفر المختار
+  bookName?: string;         // اسم السفر المختار
+  testament?: 'old' | 'new'; // العهد القديم أو الجديد
+  coveredChapters?: string;  // الأصحاحات المغطاة (مثال: "٣ أصحاحات (١ - ٣)")
+  objective?: string;        // هدف الحصة الروحي والتربوي
+  memoryVerse?: string;      // آية الدرس الأسبوعية الحافظة
+  memoryVerseRef?: string;   // شاهد الآية الحافظة
+  lessonSummary?: string;    // شرح الدرس وملاحظات الخدمة
+  attachmentName?: string;   // اسم ملف المذكرة المرفقة مع الحصة
+  fileData?: string;         // الملف المرفوع Base64 للتحميل المباشر
+  fileType?: string;         // نوع الملف (PDF / Word)
+  fileSize?: string;         // حجم الملف المرفوع
 }
 
 export interface AppNotification {

@@ -42,6 +42,7 @@ export interface DbShape {
   libraryBooks: LibraryBook[];
   yearWorkApprovedClasses: Record<string, boolean>;
   academicTerms: AcademicTerm[];
+  classAssignedBooks?: Record<string, any>;
   authSessions: SessionToken[];
 }
 
@@ -59,15 +60,16 @@ function seedUsers(): UserProfile[] {
 function emptyDb(): DbShape {
   return {
     users: seedUsers(),
-    sessions: INITIAL_SESSIONS,
-    grades: INITIAL_SESSION_GRADES,
-    finalExamScores: { ...INITIAL_FINAL_EXAM_SCORES },
-    servantSubmissions: INITIAL_SERVANT_SUBMISSIONS,
-    notifications: INITIAL_NOTIFICATIONS,
-    lessonPosts: INITIAL_LESSON_POSTS,
-    libraryBooks: INITIAL_LIBRARY_BOOKS,
+    sessions: [],
+    grades: [],
+    finalExamScores: {},
+    servantSubmissions: [],
+    notifications: [],
+    lessonPosts: [],
+    libraryBooks: [],
     yearWorkApprovedClasses: {},
     academicTerms: INITIAL_TERMS,
+    classAssignedBooks: {},
     authSessions: [],
   };
 }
@@ -84,21 +86,20 @@ export function loadDb(): DbShape {
     return seeded;
   }
   try {
-    const parsed = JSON.parse(fs.readFileSync(dbPath, 'utf8')) as DbShape;
+    const parsed = JSON.parse(fs.readFileSync(dbPath, 'utf8')) as Partial<DbShape>;
     return {
-      ...emptyDb(),
-      ...parsed,
-      users: parsed.users?.length ? parsed.users : seedUsers(),
-      sessions: parsed.sessions || INITIAL_SESSIONS,
-      grades: parsed.grades || [],
-      finalExamScores: parsed.finalExamScores || {},
-      servantSubmissions: parsed.servantSubmissions || [],
-      notifications: parsed.notifications || [],
-      lessonPosts: parsed.lessonPosts || [],
-      libraryBooks: parsed.libraryBooks?.length ? parsed.libraryBooks : INITIAL_LIBRARY_BOOKS,
-      yearWorkApprovedClasses: parsed.yearWorkApprovedClasses || {},
-      academicTerms: parsed.academicTerms?.length ? parsed.academicTerms : INITIAL_TERMS,
-      authSessions: parsed.authSessions || [],
+      users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : seedUsers(),
+      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      grades: Array.isArray(parsed.grades) ? parsed.grades : [],
+      finalExamScores: parsed.finalExamScores && typeof parsed.finalExamScores === 'object' ? parsed.finalExamScores : {},
+      servantSubmissions: Array.isArray(parsed.servantSubmissions) ? parsed.servantSubmissions : [],
+      notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
+      lessonPosts: Array.isArray(parsed.lessonPosts) ? parsed.lessonPosts : [],
+      libraryBooks: Array.isArray(parsed.libraryBooks) ? parsed.libraryBooks : [],
+      yearWorkApprovedClasses: parsed.yearWorkApprovedClasses && typeof parsed.yearWorkApprovedClasses === 'object' ? parsed.yearWorkApprovedClasses : {},
+      academicTerms: Array.isArray(parsed.academicTerms) && parsed.academicTerms.length > 0 ? parsed.academicTerms : INITIAL_TERMS,
+      classAssignedBooks: parsed.classAssignedBooks && typeof parsed.classAssignedBooks === 'object' ? parsed.classAssignedBooks : {},
+      authSessions: Array.isArray(parsed.authSessions) ? parsed.authSessions : [],
     };
   } catch {
     const seeded = emptyDb();

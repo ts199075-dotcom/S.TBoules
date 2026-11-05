@@ -11,6 +11,7 @@ import {
   ServantLessonPost,
   LibraryBook,
   AcademicTerm,
+  ClassAssignedBook,
 } from '../types';
 import {
   CLASSES_LIST,
@@ -36,9 +37,12 @@ interface AppContextType {
   users: UserProfile[];
   classes: ClassInfo[];
   academicTerms: AcademicTerm[];
+  classAssignedBooks: Record<string, ClassAssignedBook>;
+  assignBookForClass: (data: ClassAssignedBook) => Promise<void>;
   currentTermId: string;
   setCurrentTermId: (termId: string) => void;
   addAcademicTerm: (termData: Omit<AcademicTerm, 'id'>) => Promise<AcademicTerm>;
+  deleteAcademicTerm: (termId: string) => void;
   sessions: BibleSession[];
   grades: SessionGrade[];
   finalExamScores: Record<string, number>;
@@ -60,7 +64,8 @@ interface AppContextType {
   deleteUser: (userId: string) => void;
   deleteSession: (sessionId: string) => void;
   deleteLessonPost: (postId: string) => void;
-  saveSessionGrade: (gradeData: Partial<SessionGrade> & { studentId: string; sessionId: string }) => void;
+  saveSessionGrade: (gradeData: Partial<SessionGrade> & { studentId: string; sessionId: string; sessionTitle?: string; termId?: string }) => void;
+  saveBatchGrades: (data: { sessionId?: string; sessionMeta: any; grades: any[] }) => Promise<void>;
   recordQrAttendance: (
     studentId: string,
     sessionId: string,
@@ -114,22 +119,25 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  USERS: 'st_paul_users_v5',
-  CURRENT_USER_ID: 'st_paul_current_uid_v5',
-  SESSIONS: 'st_paul_sessions_v5',
-  GRADES: 'st_paul_grades_v5',
-  FINAL_SCORES: 'st_paul_final_scores_v5',
-  SERVANT_SUBS: 'st_paul_servant_subs_v5',
-  NOTIFS: 'st_paul_notifs_v5',
-  POSTS: 'st_paul_posts_v5',
-  LIBRARY: 'st_paul_library_v5',
-  THEME: 'st_paul_theme_v5',
+  USERS: 'st_paul_users_v6',
+  CURRENT_USER_ID: 'st_paul_current_uid_v6',
+  SESSIONS: 'st_paul_sessions_v6',
+  GRADES: 'st_paul_grades_v6',
+  FINAL_SCORES: 'st_paul_final_scores_v6',
+  SERVANT_SUBS: 'st_paul_servant_subs_v6',
+  NOTIFS: 'st_paul_notifs_v6',
+  POSTS: 'st_paul_posts_v6',
+  LIBRARY: 'st_paul_library_v6',
+  THEME: 'st_paul_theme_v6',
+  TERMS: 'st_paul_terms_v6',
+  ASSIGNED_BOOKS: 'st_paul_assigned_books_v6',
 };
 
 type RemoteState = {
   currentUser?: UserProfile | null;
   users?: UserProfile[];
   academicTerms?: AcademicTerm[];
+  classAssignedBooks?: Record<string, ClassAssignedBook>;
   sessions?: BibleSession[];
   grades?: SessionGrade[];
   finalExamScores?: Record<string, number>;
@@ -140,6 +148,21 @@ type RemoteState = {
   yearWorkApprovedClasses?: Record<string, boolean>;
 };
 
+// Clean legacy localStorage keys from prior versions to remove dummy mocks
+try {
+  const legacyKeys = [
+    'st_paul_users_v5', 'st_paul_sessions_v5', 'st_paul_grades_v5',
+    'st_paul_final_scores_v5', 'st_paul_servant_subs_v5', 'st_paul_notifs_v5',
+    'st_paul_posts_v5', 'st_paul_library_v5', 'st_paul_terms_v5',
+    'st_paul_users_v4', 'st_paul_sessions_v4', 'st_paul_library_v4',
+  ];
+  for (const k of legacyKeys) {
+    localStorage.removeItem(k);
+  }
+} catch {
+  /* ignore */
+}
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = readStoredString(STORAGE_KEYS.THEME, 'light');
@@ -149,9 +172,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [users, setUsers] = useState<UserProfile[]>(() => readStoredJson(STORAGE_KEYS.USERS, INITIAL_USERS));
   const [currentUserId, setCurrentUserId] = useState<string>(() => readStoredString(STORAGE_KEYS.CURRENT_USER_ID, ''));
   const [academicTerms, setAcademicTerms] = useState<AcademicTerm[]>(() =>
-    readStoredJson('st_paul_terms_v5', INITIAL_TERMS)
+    readStoredJson(STORAGE_KEYS.TERMS, INITIAL_TERMS)
   );
   const [currentTermId, setCurrentTermId] = useState<string>('term_1');
+  const [classAssignedBooks, setClassAssignedBooks] = useState<Record<string, ClassAssignedBook>>(() =>
+    readStoredJson(STORAGE_KEYS.ASSIGNED_BOOKS, {})
+  );
   const [sessions, setSessions] = useState<BibleSession[]>(() => readStoredJson(STORAGE_KEYS.SESSIONS, INITIAL_SESSIONS));
   const [grades, setGrades] = useState<SessionGrade[]>(() => readStoredJson(STORAGE_KEYS.GRADES, INITIAL_SESSION_GRADES));
   const [finalExamScores, setFinalExamScores] = useState<Record<string, number>>(() =>
@@ -177,10 +203,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const state = payload?.data || payload;
     if (state.currentUser && state.currentUser.id) {
       setCurrentUserId(state.currentUser.id);
+    } else if (state.currentUser === null && !getApiToken()) {
+      setCurrentUserId('');
     }
     if (Array.isArray(state.users)) setUsers(state.users);
     if (Array.isArray(state.academicTerms) && state.academicTerms.length > 0) {
       setAcademicTerms(state.academicTerms);
+    }
+    if (state.classAssignedBooks && typeof state.classAssignedBooks === 'object') {
+      setClassAssignedBooks(state.classAssignedBooks);
     }
     if (Array.isArray(state.sessions)) setSessions(state.sessions);
     if (Array.isArray(state.grades)) setGrades(state.grades);
@@ -232,11 +263,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [theme]);
 
-  const persistLocal = backendStatus !== 'online';
-
+  // Mirror state continuously into local cache
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.USERS, users);
-  }, [users, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.USERS, users);
+  }, [users]);
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
@@ -245,26 +275,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [currentUserId]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.SESSIONS, sessions);
-  }, [sessions, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.SESSIONS, sessions);
+  }, [sessions]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.GRADES, grades);
-  }, [grades, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.GRADES, grades);
+  }, [grades]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.FINAL_SCORES, finalExamScores);
-  }, [finalExamScores, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.FINAL_SCORES, finalExamScores);
+  }, [finalExamScores]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.SERVANT_SUBS, servantSubmissions);
-  }, [servantSubmissions, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.SERVANT_SUBS, servantSubmissions);
+  }, [servantSubmissions]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.NOTIFS, notifications);
-  }, [notifications, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.NOTIFS, notifications);
+  }, [notifications]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.POSTS, lessonPosts);
-  }, [lessonPosts, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.POSTS, lessonPosts);
+  }, [lessonPosts]);
   useEffect(() => {
-    if (persistLocal) writeStoredJson(STORAGE_KEYS.LIBRARY, libraryBooks);
-  }, [libraryBooks, persistLocal]);
+    writeStoredJson(STORAGE_KEYS.LIBRARY, libraryBooks);
+  }, [libraryBooks]);
+  useEffect(() => {
+    writeStoredJson(STORAGE_KEYS.TERMS, academicTerms);
+  }, [academicTerms]);
+  useEffect(() => {
+    writeStoredJson(STORAGE_KEYS.ASSIGNED_BOOKS, classAssignedBooks);
+  }, [classAssignedBooks]);
 
   const currentUser = users.find((u) => u.id === currentUserId) || null;
   const toggleTheme = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
@@ -524,39 +560,153 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const saveSessionGrade = (gradeData: Partial<SessionGrade> & { studentId: string; sessionId: string }) => {
+  const assignBookForClass = async (data: ClassAssignedBook) => {
+    setClassAssignedBooks((prev) => ({
+      ...prev,
+      [data.classId]: data,
+      [`${data.classId}_${data.termId}`]: data,
+    }));
+
     if (backendStatus === 'online') {
-      void remote('/api/grades', { method: 'POST', body: JSON.stringify(gradeData) });
-      return;
+      try {
+        await remote('/api/assigned-books', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        });
+      } catch (e) {
+        console.error('Failed to sync assigned book to server:', e);
+      }
     }
+  };
+
+  const saveSessionGrade = (gradeData: Partial<SessionGrade> & { studentId: string; sessionId: string; sessionTitle?: string; termId?: string }) => {
     const session = sessions.find((s) => s.id === gradeData.sessionId);
+    const completeRecord: SessionGrade = {
+      id: `grd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      sessionId: gradeData.sessionId,
+      sessionTitle: gradeData.sessionTitle || session?.title || 'لقاء دراسة الكتاب المقدس',
+      date: session?.date || new Date().toISOString().split('T')[0],
+      studentId: gradeData.studentId,
+      termId: gradeData.termId || session?.termId || currentTermId,
+      exam: clamp(Number(gradeData.exam ?? 0), 0, 10),
+      homework: clamp(Number(gradeData.homework ?? 0), 0, 10),
+      attendance: clamp(Number(gradeData.attendance ?? 0), 0, 1),
+      participation: clamp(Number(gradeData.participation ?? 0), 0, 1),
+      prayer: clamp(Number(gradeData.prayer ?? 0), 0, 1),
+      tools: clamp(Number(gradeData.tools ?? 0), 0, 1),
+      notes: gradeData.notes ?? '',
+      qrAttendedAt: gradeData.qrAttendedAt,
+    };
+
+    // 1. Immediate local optimistic update
     setGrades((prev) => {
       const existingIdx = prev.findIndex(
         (g) => g.sessionId === gradeData.sessionId && g.studentId === gradeData.studentId
       );
-      const prevRow = existingIdx >= 0 ? prev[existingIdx] : undefined;
-      const completeRecord: SessionGrade = {
-        id: prevRow?.id || `grd-${Date.now()}`,
-        sessionId: gradeData.sessionId,
-        sessionTitle: session?.title || 'لقاء دراسة الكتاب المقدس',
-        date: session?.date || new Date().toISOString().split('T')[0],
-        studentId: gradeData.studentId,
-        exam: clamp(Number(gradeData.exam ?? prevRow?.exam ?? 0), 0, 10),
-        homework: clamp(Number(gradeData.homework ?? prevRow?.homework ?? 0), 0, 10),
-        attendance: clamp(Number(gradeData.attendance ?? prevRow?.attendance ?? 0), 0, 1),
-        participation: clamp(Number(gradeData.participation ?? prevRow?.participation ?? 0), 0, 1),
-        prayer: clamp(Number(gradeData.prayer ?? prevRow?.prayer ?? 0), 0, 1),
-        tools: clamp(Number(gradeData.tools ?? prevRow?.tools ?? 0), 0, 1),
-        notes: gradeData.notes ?? prevRow?.notes ?? '',
-        qrAttendedAt: gradeData.qrAttendedAt ?? prevRow?.qrAttendedAt,
-      };
       if (existingIdx >= 0) {
         const updated = [...prev];
-        updated[existingIdx] = completeRecord;
+        updated[existingIdx] = { ...updated[existingIdx], ...completeRecord, id: updated[existingIdx].id };
         return updated;
       }
       return [...prev, completeRecord];
     });
+
+    // 2. Synchronize with remote server immediately
+    if (backendStatus === 'online') {
+      void remote('/api/grades', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...gradeData,
+          sessionTitle: completeRecord.sessionTitle,
+          date: completeRecord.date,
+          termId: completeRecord.termId,
+        }),
+      }).catch((e) => {
+        console.error('Error syncing grade to server:', e);
+      });
+    }
+  };
+
+  const saveBatchGrades = async (data: { sessionId?: string; sessionMeta: any; grades: any[] }) => {
+    const sessionId = data.sessionId || data.sessionMeta?.id || `sess-${Date.now()}`;
+    const sessionMeta = {
+      ...data.sessionMeta,
+      id: sessionId,
+    };
+
+    // 1. Optimistic update session in state
+    setSessions((prev) => {
+      const idx = prev.findIndex((s) => s.id === sessionId);
+      const updatedSession: BibleSession = {
+        id: sessionId,
+        title: sessionMeta.title || 'لقاء دراسة الكتاب المقدس',
+        classId: sessionMeta.classId || 'prep_2_3',
+        termId: sessionMeta.termId || currentTermId,
+        date: sessionMeta.date || new Date().toISOString().split('T')[0],
+        biblePassage: sessionMeta.biblePassage || sessionMeta.coveredChapters || 'شواهد مختارة',
+        servantName: sessionMeta.servantName || currentUser?.name || 'خادم الفصل',
+        maxScorePerMetric: 10,
+        qrSecretCode: sessionMeta.qrSecretCode || `STPAUL-${Date.now().toString(36).toUpperCase()}`,
+        qrActive: true,
+        sessionNumber: sessionMeta.sessionNumber,
+        bookId: sessionMeta.bookId,
+        bookName: sessionMeta.bookName,
+        testament: sessionMeta.testament,
+        coveredChapters: sessionMeta.coveredChapters,
+        objective: sessionMeta.objective,
+        memoryVerse: sessionMeta.memoryVerse,
+        memoryVerseRef: sessionMeta.memoryVerseRef,
+        lessonSummary: sessionMeta.lessonSummary,
+        attachmentName: sessionMeta.attachmentName,
+        fileData: sessionMeta.fileData,
+        fileType: sessionMeta.fileType,
+        fileSize: sessionMeta.fileSize,
+      };
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = updatedSession;
+        return copy;
+      }
+      return [updatedSession, ...prev];
+    });
+
+    // 2. Optimistic update grades in state
+    setGrades((prev) => {
+      const copy = [...prev];
+      for (const g of data.grades) {
+        const idx = copy.findIndex((ex) => ex.sessionId === sessionId && ex.studentId === g.studentId);
+        const completeRecord: SessionGrade = {
+          id: idx >= 0 ? copy[idx].id : `grd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          sessionId,
+          sessionTitle: sessionMeta.title || 'لقاء دراسة الكتاب المقدس',
+          date: sessionMeta.date || new Date().toISOString().split('T')[0],
+          studentId: g.studentId,
+          termId: sessionMeta.termId || currentTermId,
+          exam: clamp(Number(g.exam ?? 0), 0, 10),
+          homework: clamp(Number(g.homework ?? 0), 0, 10),
+          attendance: clamp(Number(g.attendance ?? 0), 0, 1),
+          participation: clamp(Number(g.participation ?? 0), 0, 1),
+          prayer: clamp(Number(g.prayer ?? 0), 0, 1),
+          tools: clamp(Number(g.tools ?? 0), 0, 1),
+          notes: g.notes || '',
+        };
+        if (idx >= 0) copy[idx] = completeRecord;
+        else copy.push(completeRecord);
+      }
+      return copy;
+    });
+
+    // 3. Remote server synchronization
+    if (backendStatus === 'online') {
+      try {
+        await remote('/api/grades/batch', {
+          method: 'POST',
+          body: JSON.stringify({ sessionId, sessionMeta, grades: data.grades }),
+        });
+      } catch (e) {
+        console.error('Error saving batch grades to server:', e);
+      }
+    }
   };
 
   const recordQrAttendance = async (studentId: string, sessionId: string, secretCode?: string) => {
@@ -778,6 +928,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return newTerm;
   };
 
+  const deleteAcademicTerm = (termId: string) => {
+    setAcademicTerms((prev) => prev.filter((t) => t.id !== termId));
+    if (backendStatus === 'online') {
+      void remote(`/api/terms/${termId}`, { method: 'DELETE' });
+    }
+  };
+
   const approveLessonPost = (postId: string) => {
     if (backendStatus === 'online') {
       void remote(`/api/posts/${postId}/approve`, { method: 'POST' });
@@ -877,6 +1034,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         currentTermId,
         setCurrentTermId,
         addAcademicTerm,
+        deleteAcademicTerm,
         sessions,
         grades,
         finalExamScores,
@@ -908,6 +1066,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         approveLessonPost,
         rejectLessonPost,
         addLibraryBook,
+        classAssignedBooks,
+        assignBookForClass,
+        saveBatchGrades,
         deleteLibraryBook,
         getStudentScoreSummary,
         getClassLeaderboard,

@@ -8,12 +8,12 @@ import { AdminDashboard, AdminTab } from './components/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { FeaturesGuideModal } from './components/FeaturesGuideModal';
 import { BrandMark } from './components/ui/BrandMark';
-import { ClassId } from './types';
-import { Shield, RotateCcw } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { CHURCH_NAME, SCHOOL_NAME, SAINT_PAUL_ICON } from './lib/constants';
+import { ClassId } from './types';
 
 const MainAppContent: React.FC = () => {
-  const { currentUser, resetDemoData, theme } = useApp();
+  const { currentUser, theme } = useApp();
 
   const [currentTab, setCurrentTab] = useState<string>('home');
   const [adminSubTab, setAdminSubTab] = useState<AdminTab>('classes');
@@ -33,6 +33,9 @@ const MainAppContent: React.FC = () => {
   useEffect(() => {
     if (!currentUser) {
       prevUserIdRef.current = null;
+      if (currentTab !== 'home') {
+        setCurrentTab('home');
+      }
       return;
     }
 
@@ -73,12 +76,7 @@ const MainAppContent: React.FC = () => {
     setIsAuthModalOpen(true);
   };
 
-  const confirmReset = () => {
-    if (window.confirm('سيتم إعادة ضبط بيانات العرض المحلية. هل تريد المتابعة؟')) {
-      resetDemoData();
-      setCurrentTab('home');
-    }
-  };
+
 
   return (
     <div
@@ -108,43 +106,23 @@ const MainAppContent: React.FC = () => {
       />
 
       <main id="main-content" className="flex-1 relative z-0" tabIndex={-1}>
-        {currentTab === 'home' && (
+        {(!currentUser || currentTab === 'home') && (
           <LandingPage onOpenAuth={handleOpenAuth} onNavigateTab={setCurrentTab} />
         )}
 
-        {currentTab === 'student' && <StudentDashboard />}
+        {currentUser && currentTab === 'student' && <StudentDashboard />}
 
-        {currentTab === 'servant' && <ServantDashboard />}
+        {currentUser && (currentUser.role === 'servant' || currentUser.role === 'assistant') && currentTab === 'servant' && (
+          <ServantDashboard />
+        )}
 
-        {currentTab === 'admin' &&
-          (currentUser?.role === 'admin' ? (
+        {currentUser && currentTab === 'admin' && (
+          currentUser.role === 'admin' ? (
             <AdminDashboard initialTab={adminSubTab} initialClassId={adminClassId} />
           ) : (
-            <div className="max-w-md mx-auto my-16 p-8 text-center surface-card space-y-4">
-              <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mx-auto">
-                <Shield className="w-8 h-8" />
-              </div>
-              <h2 className="font-bold text-lg">صلاحية محظورة</h2>
-              <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
-                لوحة الإدارة مخصصة لأمين الخدمة فقط.
-              </p>
-              <button
-                type="button"
-                onClick={() =>
-                  setCurrentTab(
-                    currentUser?.role === 'servant'
-                      ? 'servant'
-                      : currentUser?.role === 'student'
-                        ? 'student'
-                        : 'home'
-                  )
-                }
-                className="btn-secondary"
-              >
-                العودة إلى لوحتي
-              </button>
-            </div>
-          ))}
+            <LandingPage onOpenAuth={handleOpenAuth} onNavigateTab={setCurrentTab} />
+          )
+        )}
       </main>
 
       <footer className="relative z-10 bg-stone-900 dark:bg-stone-950 text-white border-t border-stone-800 py-10 px-4 sm:px-6">
@@ -170,15 +148,6 @@ const MainAppContent: React.FC = () => {
               <button type="button" onClick={() => setFeaturesOpen(true)} className="hover:text-amber-300">
                 دليل المنصة
               </button>
-              <span aria-hidden="true">•</span>
-              <button
-                type="button"
-                onClick={confirmReset}
-                className="hover:text-amber-300 inline-flex items-center gap-1"
-              >
-                <RotateCcw className="w-3 h-3" />
-                إعادة ضبط البيانات المحلية
-              </button>
             </nav>
           </div>
 
@@ -198,14 +167,64 @@ const MainAppContent: React.FC = () => {
         onLoginSuccess={handleLoginSuccess}
       />
       <FeaturesGuideModal isOpen={featuresOpen} onClose={() => setFeaturesOpen(false)} />
+
+
     </div>
   );
 };
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100" dir="rtl">
+          <div className="max-w-md w-full bg-white dark:bg-stone-900 p-8 rounded-3xl border border-stone-200 dark:border-stone-800 shadow-2xl text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto text-2xl font-bold">
+              ✝️
+            </div>
+            <h2 className="text-xl font-black">مدرسة القديس بولس للكتاب المقدس</h2>
+            <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
+              تم تحديث الجلسة. يمكنك العودة للصفحة الرئيسية الآن.
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-6 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+            >
+              العودة للصفحة الرئيسية
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <MainAppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <MainAppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

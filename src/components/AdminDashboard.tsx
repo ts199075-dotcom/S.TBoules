@@ -97,7 +97,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedClassId, setSelectedClassId] = useState<ClassId>(initialClassId || 'primary_4');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Per-Class Targeted Post Modal State with Audience Selection (User Request)
+  const [sessionToDelete, setSessionToDelete] = useState<BibleSession | null>(null);
   const [newPostModalOpen, setNewPostModalOpen] = useState(false);
   const [newPostTargetClass, setNewPostTargetClass] = useState<ClassId>('primary_4');
   const [newPostAudience, setNewPostAudience] = useState<'all' | 'servants_only' | 'students'>('all');
@@ -763,11 +763,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>📅 {s.title} ({s.date})</span>
                       <button
                         type="button"
-                        onClick={() => deleteSession(s.id)}
-                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/60 p-0.5 rounded cursor-pointer transition-colors"
+                        onClick={() => setSessionToDelete(s)}
+                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/60 p-1 rounded-lg cursor-pointer transition-colors"
                         title="حذف هذا اللقاء ودرجاته"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -2746,6 +2746,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         );
       })()}
+
+      {/* Confirmation Modal for Session Deletion */}
+      {sessionToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">تأكيد حذف اللقاء الأسبوعي</h3>
+                <p className="text-xs text-slate-500">سيتم مسح اللقاء وكافة درجاته نهائياً</p>
+              </div>
+            </div>
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-900/40 text-xs text-rose-900 dark:text-rose-200 space-y-1">
+              <p>هل أنت متأكد من رغبتك في حذف اللقاء التالي:</p>
+              <p className="font-bold text-sm text-slate-900 dark:text-slate-100">«{sessionToDelete.title}»</p>
+              <p className="text-[11px] text-rose-700 dark:text-rose-300 pt-1">
+                ⚠️ سيؤدي هذا الإجراء إلى حذف كافة سجلات الحضور والدرجات المرتبطة بهذا اللقاء لجميع الطلاب المسجلين.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSessionToDelete(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer transition-colors"
+              >
+                إلغاء التراجع
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteSession(sessionToDelete.id);
+                  setSessionToDelete(null);
+                }}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md cursor-pointer transition-all flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>نعم، حذف نهائي</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

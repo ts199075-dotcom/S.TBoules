@@ -303,6 +303,7 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
                   onClick={() => {
                     logout();
                     onClose();
+                    onNavigate('home');
                   }}
                   className="p-2.5 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 text-rose-600 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
                 >
