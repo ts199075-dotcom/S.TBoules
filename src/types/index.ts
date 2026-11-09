@@ -162,6 +162,28 @@ export interface ClassAssignedBook {
   assignedAt?: string;
   targetSessionsCount?: number; // e.g. 2, 3, 4, 8
   notes?: string;
+  customOverview?: string; // تخصيص الخادم لنبذة ومعلومات السفر لطلابه
+}
+
+export interface MemoryVerseItem {
+  id: string;
+  verse: string;
+  reference: string;
+}
+
+export interface ChurchEvent {
+  id: string;
+  title: string;
+  date: string;
+  time?: string;
+  location?: string;
+  description: string;
+  type: 'celebration' | 'graduation' | 'spiritual_day' | 'trip' | 'meeting' | 'competition' | 'general';
+  targetAudience: 'all' | 'students' | 'servants';
+  targetClassId?: ClassId | 'all_classes';
+  status: 'upcoming' | 'ongoing' | 'completed';
+  createdBy?: string;
+  createdAt: string;
 }
 
 export interface BibleSession {
@@ -185,6 +207,7 @@ export interface BibleSession {
   objective?: string;        // هدف الحصة الروحي والتربوي
   memoryVerse?: string;      // آية الدرس الأسبوعية الحافظة
   memoryVerseRef?: string;   // شاهد الآية الحافظة
+  memoryVerses?: MemoryVerseItem[]; // آيات حافظة متعددة للحصة
   lessonSummary?: string;    // شرح الدرس وملاحظات الخدمة
   attachmentName?: string;   // اسم ملف المذكرة المرفقة مع الحصة
   fileData?: string;         // الملف المرفوع Base64 للتحميل المباشر

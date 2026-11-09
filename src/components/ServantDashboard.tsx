@@ -29,6 +29,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronDown,
+  Scroll,
 } from 'lucide-react';
 import { QrAttendanceModal } from './QrAttendanceModal';
 import { LibrarySection } from './admin/LibrarySection';
@@ -86,6 +87,9 @@ export const ServantDashboard: React.FC = () => {
   const [workbenchDate, setWorkbenchDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [workbenchMemoryVerse, setWorkbenchMemoryVerse] = useState<string>('');
   const [workbenchVerseRef, setWorkbenchVerseRef] = useState<string>('');
+  const [workbenchVerses, setWorkbenchVerses] = useState<Array<{ id: string; verse: string; reference: string }>>([
+    { id: 'v-1', verse: '', reference: '' },
+  ]);
   const [workbenchLessonSummary, setWorkbenchLessonSummary] = useState<string>('');
   const [workbenchAttachmentName, setWorkbenchAttachmentName] = useState<string>('');
   const [workbenchFileData, setWorkbenchFileData] = useState<string | undefined>(undefined);
@@ -96,9 +100,26 @@ export const ServantDashboard: React.FC = () => {
     bookTitle: string;
     chapters: string;
     studentsCount: number;
-    hasVerse: boolean;
+    versesCount: number;
     hasAttachment: boolean;
   } | null>(null);
+
+  const handleAddWorkbenchVerse = () => {
+    setWorkbenchVerses((prev) => [
+      ...prev,
+      { id: `v-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, verse: '', reference: '' },
+    ]);
+  };
+
+  const handleUpdateWorkbenchVerse = (id: string, field: 'verse' | 'reference', val: string) => {
+    setWorkbenchVerses((prev) =>
+      prev.map((v) => (v.id === id ? { ...v, [field]: val } : v))
+    );
+  };
+
+  const handleRemoveWorkbenchVerse = (id: string) => {
+    setWorkbenchVerses((prev) => (prev.length > 1 ? prev.filter((v) => v.id !== id) : prev));
+  };
 
   const [batchGradesMap, setBatchGradesMap] = useState<
     Record<string, { exam: number; homework: number; attendance: number; participation: number; prayer: number; tools: number; notes: string }>
@@ -147,8 +168,19 @@ export const ServantDashboard: React.FC = () => {
       setWorkbenchTitle(existing.title || `الحصة ${workbenchSessionNumber}: دراسة السفر`);
       setWorkbenchObjective(existing.objective || 'فهم الشاهد الكتابي وتطبيقه روحياً وحفظ الآية');
       setWorkbenchDate(existing.date || new Date().toISOString().split('T')[0]);
-      setWorkbenchMemoryVerse(existing.memoryVerse || '');
-      setWorkbenchVerseRef(existing.memoryVerseRef || '');
+      if (existing.memoryVerses && existing.memoryVerses.length > 0) {
+        setWorkbenchVerses(existing.memoryVerses);
+        setWorkbenchMemoryVerse(existing.memoryVerses[0]?.verse || '');
+        setWorkbenchVerseRef(existing.memoryVerses[0]?.reference || '');
+      } else if (existing.memoryVerse) {
+        setWorkbenchVerses([{ id: 'v-1', verse: existing.memoryVerse, reference: existing.memoryVerseRef || '' }]);
+        setWorkbenchMemoryVerse(existing.memoryVerse);
+        setWorkbenchVerseRef(existing.memoryVerseRef || '');
+      } else {
+        setWorkbenchVerses([{ id: 'v-1', verse: '', reference: '' }]);
+        setWorkbenchMemoryVerse('');
+        setWorkbenchVerseRef('');
+      }
       setWorkbenchLessonSummary(existing.lessonSummary || existing.objective || '');
       setWorkbenchAttachmentName(existing.attachmentName || '');
       setWorkbenchFileData(existing.fileData);
@@ -185,6 +217,7 @@ export const ServantDashboard: React.FC = () => {
       setWorkbenchTitle(`الحصة ${workbenchSessionNumber}: دراسة ${activeBook.title}`);
       setWorkbenchObjective(`دراسة وتطبيق الشاهد الكتابي في ${activeBook.title} وحفظ الآية الأسبوعية`);
       setWorkbenchDate(new Date().toISOString().split('T')[0]);
+      setWorkbenchVerses([{ id: 'v-1', verse: '', reference: '' }]);
       setWorkbenchMemoryVerse('');
       setWorkbenchVerseRef('');
       setWorkbenchLessonSummary('');
@@ -231,8 +264,15 @@ export const ServantDashboard: React.FC = () => {
   const [attachmentType, setAttachmentType] = useState<'pdf' | 'document' | 'notes' | 'image'>(
     currentSubmission?.prepAttachmentType || 'pdf'
   );
+  const [attachmentData, setAttachmentData] = useState<string | undefined>(
+    currentSubmission?.prepAttachmentData || undefined
+  );
   const [prepNotes, setPrepNotes] = useState(
     currentSubmission?.prepNotes || 'تم تجهيز أسئلة مسابقة سريعة وعرض سلايدات على الداتاشو مع خريطة رحلات بولس الرسول.'
+  );
+  const [isEditOverviewModalOpen, setIsEditOverviewModalOpen] = useState(false);
+  const [customOverviewDraft, setCustomOverviewDraft] = useState(
+    currentClassAssigned?.customOverview || ''
   );
 
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
@@ -346,11 +386,33 @@ export const ServantDashboard: React.FC = () => {
       termId: currentTermId,
       assignedByServantName: currentUser?.name || 'خادم الفصل',
       assignedAt: new Date().toISOString().split('T')[0],
+      customOverview: currentClassAssigned?.bookId === book.id ? currentClassAssigned.customOverview : undefined,
     });
     setWorkbenchBookId(book.id);
     setWorkbenchTitle(`الحصة ${workbenchSessionNumber}: دراسة ${book.title}`);
     setIsAssignBookModalOpen(false);
     setAssignSuccessMsg(`تم تحديد سفر «${book.title}» رسمياً لطلاب فصل ${classObj.name}! الآن لن يفتح للمخدومين سوى هذا السفر المقرر.`);
+    setTimeout(() => setAssignSuccessMsg(null), 5000);
+  };
+
+  const handleSaveCustomOverview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const activeAssigned = currentClassAssigned || {
+      classId: servantClassId,
+      bookId: 'genesis',
+      bookName: 'سفر التكوين',
+      testament: 'old' as const,
+      termId: currentTermId,
+      assignedByServantName: currentUser?.name || 'خادم الفصل',
+      assignedAt: new Date().toISOString().split('T')[0],
+    };
+
+    await assignBookForClass({
+      ...activeAssigned,
+      customOverview: customOverviewDraft.trim() || undefined,
+    });
+    setIsEditOverviewModalOpen(false);
+    setAssignSuccessMsg('تم حفظ وتحديث نبذة ومعلومات السفر لطلاب فصلك بنجاح! ستظهر للطلاب فوراً.');
     setTimeout(() => setAssignSuccessMsg(null), 5000);
   };
 
@@ -396,8 +458,9 @@ export const ServantDashboard: React.FC = () => {
         qrSecretCode: existingSession?.qrSecretCode || `STPAUL-${book.id.slice(0, 3).toUpperCase()}-${workbenchSessionNumber}`,
         qrActive: true,
         maxScorePerMetric: 10,
-        memoryVerse: workbenchMemoryVerse,
-        memoryVerseRef: workbenchVerseRef,
+        memoryVerse: workbenchVerses.find((v) => v.verse.trim())?.verse || workbenchMemoryVerse,
+        memoryVerseRef: workbenchVerses.find((v) => v.verse.trim())?.reference || workbenchVerseRef,
+        memoryVerses: workbenchVerses.filter((v) => v.verse.trim()),
         lessonSummary: workbenchLessonSummary,
         attachmentName: workbenchAttachmentName || undefined,
         fileData: workbenchFileData,
@@ -412,32 +475,35 @@ export const ServantDashboard: React.FC = () => {
     );
     setTimeout(() => setBatchGradeSuccessMsg(null), 6000);
 
+    const validVerses = workbenchVerses.filter((v) => v.verse.trim());
+
     // Open high-clarity publication delivery modal
     setWorkbenchPublishSuccessModal({
       sessionNumber: workbenchSessionNumber,
       bookTitle: book.title,
       chapters: workbenchChapters,
       studentsCount: classStudents.length,
-      hasVerse: Boolean(workbenchMemoryVerse),
+      versesCount: validVerses.length,
       hasAttachment: Boolean(workbenchAttachmentName),
     });
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    submitServantCheckIn({
+    await submitServantCheckIn({
       status,
       absenceReason: status === 'absent' ? absenceReason : undefined,
       prepTitle: status === 'attending' ? prepTitle : undefined,
       prepBibleVerse: status === 'attending' ? prepBibleVerse : undefined,
       prepAttachmentName: status === 'attending' ? attachmentName : undefined,
       prepAttachmentType: status === 'attending' ? attachmentType : undefined,
+      prepAttachmentData: status === 'attending' ? attachmentData : undefined,
       prepNotes: status === 'attending' ? prepNotes : undefined,
     });
 
     setIsSubmittedSuccess(true);
-    setTimeout(() => setIsSubmittedSuccess(false), 4000);
+    setTimeout(() => setIsSubmittedSuccess(false), 5000);
   };
 
   const handleCreatePost = (e: React.FormEvent) => {
@@ -609,6 +675,15 @@ export const ServantDashboard: React.FC = () => {
                   : `لم تقم بعد باختيار السفر المخصص لفصلك. اضغط على الزر لاختيار السفر المناسب من العهد القديم أو العهد الجديد (٧٣ سفراً قانونياً).`}
               </p>
 
+              {currentClassAssigned?.customOverview && (
+                <div className="p-3.5 rounded-2xl bg-black/30 border border-amber-400/30 text-amber-200 text-xs space-y-1 max-w-2xl">
+                  <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                    <span>✍️ نبذة ومعلومات السفر المخصصة لطلابك (تظهر لهم في شاشاتهم):</span>
+                  </div>
+                  <p className="whitespace-pre-line leading-relaxed">{currentClassAssigned.customOverview}</p>
+                </div>
+              )}
+
               {currentClassAssigned && (
                 <div className="text-[11px] text-amber-300 font-medium flex items-center gap-3 pt-1">
                   <span>تم التكليف بواسطة: <strong>{currentClassAssigned.assignedByServantName || currentUser?.name}</strong></span>
@@ -619,6 +694,17 @@ export const ServantDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomOverviewDraft(currentClassAssigned?.customOverview || '');
+                  setIsEditOverviewModalOpen(true);
+                }}
+                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-amber-200 font-bold text-xs border border-amber-300/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>✍️ {currentClassAssigned?.customOverview ? 'تعديل نبذة السفر للطلاب' : 'كتابة نبذة خاصة للطلاب'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsAssignBookModalOpen(true)}
@@ -883,31 +969,65 @@ export const ServantDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Memory Verse & Reference */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
-                      5. الآية الأسبوعية الحافظة للحصة:
+                {/* Dynamic Memory Verses List (User Request 4: إضافة آيات براحته مش واحدة بس) */}
+                <div className="space-y-3 p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-amber-950 dark:text-amber-200 text-xs flex items-center gap-1.5">
+                      <Scroll className="w-4 h-4 text-amber-600" />
+                      <span>5. الآيات الحافظة للحصة (يمكنك إضافة أكثر من آية بحرية):</span>
                     </label>
-                    <input
-                      type="text"
-                      placeholder="مثال: «فِي الْبَدْءِ كَانَ الْكَلِمَةُ، وَالْكَلِمَةُ كَانَ عِنْدَ اللهِ، وَكَانَ الْكَلِمَةُ اللهَ»"
-                      value={workbenchMemoryVerse}
-                      onChange={(e) => setWorkbenchMemoryVerse(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-serif"
-                    />
+                    <button
+                      type="button"
+                      onClick={handleAddWorkbenchVerse}
+                      className="px-3 py-1 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة آية أخرى ✝️</span>
+                    </button>
                   </div>
-                  <div>
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
-                      الشاهد الكتابي للآية:
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="مثال: يوحنا ١ : ١"
-                      value={workbenchVerseRef}
-                      onChange={(e) => setWorkbenchVerseRef(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold"
-                    />
+
+                  <div className="space-y-2.5">
+                    {workbenchVerses.map((item, vIdx) => (
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-amber-200 dark:border-slate-700 space-y-2"
+                      >
+                        <div className="flex items-center justify-between text-[11px] font-bold text-stone-500 dark:text-stone-400">
+                          <span>الآية رقم ({vIdx + 1}):</span>
+                          {workbenchVerses.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveWorkbenchVerse(item.id)}
+                              className="text-rose-600 hover:text-rose-500 hover:underline flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>حذف هذه الآية</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                          <div className="sm:col-span-2">
+                            <input
+                              type="text"
+                              placeholder="نص الآية (مثال: «فِي الْبَدْءِ كَانَ الْكَلِمَةُ، وَالْكَلِمَةُ كَانَ عِنْدَ اللهِ»)"
+                              value={item.verse}
+                              onChange={(e) => handleUpdateWorkbenchVerse(item.id, 'verse', e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-serif"
+                            />
+                          </div>
+                          <div>
+                            <input
+                              type="text"
+                              placeholder="الشاهد (مثال: يوحنا ١ : ١)"
+                              value={item.reference}
+                              onChange={(e) => handleUpdateWorkbenchVerse(item.id, 'reference', e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-bold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -1477,9 +1597,26 @@ export const ServantDashboard: React.FC = () => {
                   </div>
                   <input
                     type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,image/*"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) setAttachmentName(f.name);
+                      if (f) {
+                        if (f.size > 15 * 1024 * 1024) {
+                          alert('حجم الملف كبير جداً. الحد الأقصى ١٥ ميجابايت.');
+                          return;
+                        }
+                        setAttachmentName(f.name);
+                        const ext = f.name.split('.').pop()?.toLowerCase();
+                        if (ext === 'pdf') setAttachmentType('pdf');
+                        else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) setAttachmentType('image');
+                        else setAttachmentType('document');
+
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setAttachmentData(reader.result as string);
+                        };
+                        reader.readAsDataURL(f);
+                      }
                     }}
                     className="mt-2 text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white cursor-pointer"
                   />
@@ -1494,7 +1631,7 @@ export const ServantDashboard: React.FC = () => {
               className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
             >
               <Send className="w-4 h-4" />
-              <span>إرسال التقرير وتثبيته في لوحة الإدارة</span>
+              <span>إرسال التحضير لأمين الخدمة</span>
             </button>
           </div>
         </form>
@@ -1507,7 +1644,7 @@ export const ServantDashboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-amber-600" />
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                نشر مذكرات ومسابقات كتابية للطلاب (نظام الاعتماد والموافقة)
+                نشر مذكرات ومسابقات كتابية للطلاب
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1859,9 +1996,9 @@ export const ServantDashboard: React.FC = () => {
                 <strong className="text-amber-700 dark:text-amber-400">سفر {workbenchPublishSuccessModal.bookTitle} ({workbenchPublishSuccessModal.chapters})</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">الآية الأسبوعية والشرح:</span>
-                <strong className={workbenchPublishSuccessModal.hasVerse ? 'text-emerald-600' : 'text-slate-400'}>
-                  {workbenchPublishSuccessModal.hasVerse ? 'تم تضمين الآية والشاهد ✅' : 'لم تُحدد'}
+                <span className="text-slate-500">الآيات الحافظة للدرس:</span>
+                <strong className={workbenchPublishSuccessModal.versesCount > 0 ? 'text-emerald-600' : 'text-slate-400'}>
+                  {workbenchPublishSuccessModal.versesCount > 0 ? `تم تضمين (${workbenchPublishSuccessModal.versesCount}) آيات حافظة بالشواهد ✅` : 'لم تُحدد'}
                 </strong>
               </div>
               <div className="flex items-center justify-between">
@@ -1932,6 +2069,68 @@ export const ServantDashboard: React.FC = () => {
               assignedBookIds={currentClassAssigned ? [currentClassAssigned.bookId] : []}
               onAssignBook={handleAssignBook}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Custom Book Overview / Notes Modal for Servant */}
+      {isEditOverviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 max-h-[90vh] overflow-y-auto text-right">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <span>✍️ تخصيص نبذة ومعلومات السفر لطلاب فصلك</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  سفر «{currentClassAssigned?.bookName || 'سفر التكوين'}» — ما تكتبه هنا سيظهر لطلاب فصلك مباشرة في شاشاتهم بدلاً من أو مع النبذة التلقائية.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditOverviewModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCustomOverview} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  اكتب نبذة أو مقدمة أو توجيهات دراسية خاصة لطلابك حول هذا السفر:
+                </label>
+                <textarea
+                  rows={6}
+                  required
+                  placeholder="مثال: يركز هذا السفر على أمانة الله في المواعيد، وسندرس فيه خمس شخصيات رئيسية... يرجى قراءة الأصحاحات وحفظ الشواهد الأسبوعية..."
+                  value={customOverviewDraft}
+                  onChange={(e) => setCustomOverviewDraft(e.target.value)}
+                  className="w-full p-3.5 text-xs rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-amber-500/30 leading-relaxed font-medium"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 text-[11px] text-amber-900 dark:text-amber-200">
+                💡 <strong>ملاحظة:</strong> يمكنك تعديل هذه النبذة في أي وقت، وستتحدث تلقائياً في شاشات الطلاب المشتركين في الفصل فور حفظها.
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOverviewModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ واعتماد النبذة للطلاب ✅</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import {
   SessionGrade,
   UserProfile,
   UserRole,
+  ChurchEvent,
 } from '../src/types';
 import { CLASSES_LIST, SAMPLE_USERS } from '../src/data/mockData';
 import {
@@ -18,7 +19,7 @@ import {
   publicUser,
 } from '../src/lib/scores';
 import { createToken, hashPassword, sessionExpiry, verifyPassword } from './auth';
-import { DbShape, loadDb, resetDb, saveDb, withDb } from './store';
+import { DbShape, loadDb, resetDb, saveDb, withDb, mergeStateIntoDb } from './store';
 
 const CLASS_IDS: ClassId[] = [
   'primary_4',
@@ -84,6 +85,7 @@ function statePayload(db: DbShape, user: UserProfile | null) {
     libraryBooks: db.libraryBooks || [],
     yearWorkApprovedClasses: db.yearWorkApprovedClasses || {},
     classAssignedBooks: db.classAssignedBooks || {},
+    churchEvents: db.churchEvents || [],
     lessonPosts: (db.lessonPosts || []).filter((p) => {
       if (!user) {
         return p.status === 'approved' && (!p.targetAudience || p.targetAudience === 'all');
@@ -242,10 +244,7 @@ export function createApiApp() {
       if (found.status === 'pending') {
         return {
           status: 403,
-          message:
-            found.role === 'servant'
-              ? 'حساب الخادم قيد المراجعة والموافقة من قِبل أمين الخدمة. برجاء الانتظار حتى يتم اعتماد الحساب.'
-              : 'طلب التحاق المخدوم قيد المراجعة والاعتماد من أمين الخدمة. سيتم التفعيل قريباً.',
+          message: 'أسف، برجاء انتظار موافقة أمين الخدمة على حسابك أولاً',
         };
       }
       const expected = found.password || found.phone;
@@ -300,21 +299,14 @@ export function createApiApp() {
         audienceRoles: ['admin', 'assistant'],
       });
 
-      const token = createToken();
-      db.authSessions.unshift({
-        token,
-        userId: newUser.id,
-        createdAt: new Date().toISOString(),
-        expiresAt: sessionExpiry(),
-      });
-      return { status: 201, token, user: stripUser(newUser), state: statePayload(db, newUser) };
+      // Pending user must NOT receive an active auth session or be logged in automatically!
+      return { status: 201, user: stripUser(newUser), state: statePayload(db, null) };
     });
 
     if (result.status !== 201) return jsonError(res, result.status, result.message || 'تعذر التسجيل');
     return res.status(201).json({
       success: true,
       message: 'تم إرسال الطلب وهو قيد المراجعة.',
-      token: result.token,
       user: result.user,
       ...result.state,
     });
@@ -342,13 +334,17 @@ export function createApiApp() {
       if (!target) return { status: 404, message: 'المستخدم غير موجود.' };
       if (req.user && req.user.id === target.id) return { status: 403, message: 'لا يمكن اعتماد الحساب ذاتياً.' };
       target.status = 'active';
-      pushNotif(db, {
-        title: 'تم اعتماد الحساب بنجاح',
-        message: `تم قبول انضمام ${target.name} وتفعيل حسابه في مدرسة سانت بولس.`,
-        type: 'new_student',
-        audienceUserId: target.id,
-        audienceRoles: ['admin', 'assistant'],
-      });
+
+      // Mark pending notification as read so the badge counter decrements by 1!
+      for (const n of db.notifications) {
+        if (
+          (n.type === 'new_student' && (n.message.includes(target.name) || n.audienceUserId === target.id)) ||
+          n.audienceUserId === target.id
+        ) {
+          n.read = true;
+        }
+      }
+
       return { status: 200, state: statePayload(db, req.user || null) };
     });
     if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
@@ -361,6 +357,17 @@ export function createApiApp() {
       if (!target) return { status: 404, message: 'المستخدم غير موجود.' };
       if (target.role === 'admin') return { status: 403, message: 'لا يمكن رفض حساب المسؤول.' };
       target.status = 'rejected';
+
+      // Mark pending notification as read so the badge counter decrements!
+      for (const n of db.notifications) {
+        if (
+          (n.type === 'new_student' && (n.message.includes(target.name) || n.audienceUserId === target.id)) ||
+          n.audienceUserId === target.id
+        ) {
+          n.read = true;
+        }
+      }
+
       return { status: 200, state: statePayload(db, req.user || null) };
     });
     if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
@@ -512,6 +519,7 @@ export function createApiApp() {
           objective: sessionMeta.objective ? String(sessionMeta.objective) : undefined,
           memoryVerse: sessionMeta.memoryVerse ? String(sessionMeta.memoryVerse) : undefined,
           memoryVerseRef: sessionMeta.memoryVerseRef ? String(sessionMeta.memoryVerseRef) : undefined,
+          memoryVerses: Array.isArray(sessionMeta.memoryVerses) ? sessionMeta.memoryVerses : undefined,
           lessonSummary: sessionMeta.lessonSummary ? String(sessionMeta.lessonSummary) : undefined,
           attachmentName: sessionMeta.attachmentName ? String(sessionMeta.attachmentName) : undefined,
           fileData: sessionMeta.fileData ? String(sessionMeta.fileData) : undefined,
@@ -529,6 +537,7 @@ export function createApiApp() {
         if (sessionMeta.date) session.date = String(sessionMeta.date);
         if (sessionMeta.memoryVerse !== undefined) session.memoryVerse = sessionMeta.memoryVerse ? String(sessionMeta.memoryVerse) : undefined;
         if (sessionMeta.memoryVerseRef !== undefined) session.memoryVerseRef = sessionMeta.memoryVerseRef ? String(sessionMeta.memoryVerseRef) : undefined;
+        if (sessionMeta.memoryVerses !== undefined) session.memoryVerses = Array.isArray(sessionMeta.memoryVerses) ? sessionMeta.memoryVerses : undefined;
         if (sessionMeta.lessonSummary !== undefined) session.lessonSummary = sessionMeta.lessonSummary ? String(sessionMeta.lessonSummary) : undefined;
         if (sessionMeta.attachmentName !== undefined) session.attachmentName = sessionMeta.attachmentName ? String(sessionMeta.attachmentName) : undefined;
         if (sessionMeta.fileData !== undefined) session.fileData = sessionMeta.fileData ? String(sessionMeta.fileData) : undefined;
@@ -583,6 +592,7 @@ export function createApiApp() {
     const termId = String(req.body?.termId || 'term_1').trim();
     const targetSessionsCount = Number(req.body?.targetSessionsCount || 8);
     const notes = String(req.body?.notes || '').trim();
+    const customOverview = req.body?.customOverview !== undefined ? String(req.body.customOverview).trim() : undefined;
 
     if (!classId || !bookId || !bookName) {
       return jsonError(res, 400, 'بيانات السفر والفصل ناقصة.');
@@ -600,6 +610,7 @@ export function createApiApp() {
         assignedAt: todayIso(),
         targetSessionsCount,
         notes,
+        customOverview,
       };
       db.classAssignedBooks[classId] = assignment;
       db.classAssignedBooks[`${classId}_${termId}`] = assignment;
@@ -614,7 +625,7 @@ export function createApiApp() {
       return { status: 200, assignment, state: statePayload(db, req.user || null) };
     });
 
-    res.json({ success: true, ...result.state });
+    res.json({ success: true, assignment: result.assignment, ...result.state });
   });
 
   app.post('/api/attendance/qr', requireAuth, async (req: AuthedRequest, res) => {
@@ -736,6 +747,14 @@ export function createApiApp() {
         testament: req.body?.testament === 'new' ? 'new' : 'old',
         coveredChapters: req.body?.coveredChapters ? String(req.body.coveredChapters) : undefined,
         objective: req.body?.objective ? String(req.body.objective) : undefined,
+        memoryVerse: req.body?.memoryVerse ? String(req.body.memoryVerse) : undefined,
+        memoryVerseRef: req.body?.memoryVerseRef ? String(req.body.memoryVerseRef) : undefined,
+        memoryVerses: Array.isArray(req.body?.memoryVerses) ? req.body.memoryVerses : undefined,
+        lessonSummary: req.body?.lessonSummary ? String(req.body.lessonSummary) : undefined,
+        attachmentName: req.body?.attachmentName ? String(req.body.attachmentName) : undefined,
+        fileData: req.body?.fileData ? String(req.body.fileData) : undefined,
+        fileType: req.body?.fileType ? String(req.body.fileType) : undefined,
+        fileSize: req.body?.fileSize ? String(req.body.fileSize) : undefined,
       };
 
       if (existingIdx >= 0) {
@@ -847,6 +866,14 @@ export function createApiApp() {
       post.status = 'approved';
       post.approvedBy = req.user?.name || 'أمين الخدمة';
       post.approvedAt = todayIso();
+
+      // Mark matching post_pending notification as read to decrement badge counter!
+      for (const n of db.notifications) {
+        if (n.type === 'post_pending' && n.message.includes(post.title)) {
+          n.read = true;
+        }
+      }
+
       pushNotif(db, {
         title: 'تم اعتماد ونشر المادة التعليمية',
         message: `وافق مسؤول النظام على نشر: "${post.title}" وأصبحت متاحة للطلاب الآن.`,
@@ -866,6 +893,14 @@ export function createApiApp() {
       if (!post) return { status: 404, message: 'المنشور غير موجود.' };
       post.status = 'rejected';
       post.rejectionReason = String(req.body?.reason || 'مرفوض من أمانة الخدمة');
+
+      // Mark matching post_pending notification as read to decrement badge counter!
+      for (const n of db.notifications) {
+        if (n.type === 'post_pending' && n.message.includes(post.title)) {
+          n.read = true;
+        }
+      }
+
       return { status: 200, state: statePayload(db, req.user || null) };
     });
     if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
@@ -1091,6 +1126,122 @@ export function createApiApp() {
       return { status: 200, state: statePayload(db, req.user || null) };
     });
     res.json({ success: true, ...result.state });
+  });
+
+  // --- CHURCH EVENTS CRUD (User Request 2) ---
+  app.get('/api/events', (_req, res) => {
+    const db = loadDb();
+    res.json({ success: true, events: db.churchEvents || [] });
+  });
+
+  app.post('/api/events', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const title = String(req.body?.title || '').trim();
+    if (!title) return jsonError(res, 400, 'عنوان المناسبة أو الحفلة مطلوب.');
+    const result = await withDb((db) => {
+      const newEvent: ChurchEvent = {
+        id: req.body?.id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title,
+        date: String(req.body?.date || todayIso()),
+        time: req.body?.time ? String(req.body.time) : undefined,
+        location: req.body?.location ? String(req.body.location) : undefined,
+        description: String(req.body?.description || '').trim(),
+        type: req.body?.type || 'general',
+        targetAudience: req.body?.targetAudience || 'all',
+        targetClassId: req.body?.targetClassId,
+        status: req.body?.status || 'upcoming',
+        createdBy: req.user?.name || 'أمين الخدمة',
+        createdAt: todayIso(),
+      };
+      db.churchEvents = db.churchEvents || [];
+      db.churchEvents.unshift(newEvent);
+      pushNotif(db, {
+        title: 'مناسبة كنسية جديدة',
+        message: `تمت إضافة "${newEvent.title}" في أجندة الخدمة.`,
+        type: 'post_approved',
+        audienceRoles: ['admin', 'assistant', 'servant', 'student'],
+      });
+      return { status: 201, event: newEvent, state: statePayload(db, req.user || null) };
+    });
+    res.status(201).json({ success: true, event: result.event, ...result.state });
+  });
+
+  app.put('/api/events/:id', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const eventId = req.params.id;
+    const result = await withDb((db) => {
+      db.churchEvents = db.churchEvents || [];
+      const idx = db.churchEvents.findIndex((e) => e.id === eventId);
+      if (idx === -1) return { status: 404, message: 'المناسبة غير موجودة.' };
+      const prev = db.churchEvents[idx];
+      const updated: ChurchEvent = {
+        ...prev,
+        title: req.body?.title !== undefined ? String(req.body.title).trim() : prev.title,
+        date: req.body?.date !== undefined ? String(req.body.date) : prev.date,
+        time: req.body?.time !== undefined ? String(req.body.time) : prev.time,
+        location: req.body?.location !== undefined ? String(req.body.location) : prev.location,
+        description: req.body?.description !== undefined ? String(req.body.description).trim() : prev.description,
+        type: req.body?.type || prev.type,
+        targetAudience: req.body?.targetAudience || prev.targetAudience,
+        targetClassId: req.body?.targetClassId !== undefined ? req.body.targetClassId : prev.targetClassId,
+        status: req.body?.status || prev.status,
+      };
+      db.churchEvents[idx] = updated;
+      return { status: 200, event: updated, state: statePayload(db, req.user || null) };
+    });
+    if (result.status !== 200) return jsonError(res, result.status, (result as any).message || 'فشل التعديل');
+    res.json({ success: true, event: result.event, ...result.state });
+  });
+
+  app.delete('/api/events/:id', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
+    const eventId = req.params.id;
+    const result = await withDb((db) => {
+      db.churchEvents = (db.churchEvents || []).filter((e) => e.id !== eventId);
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    res.json({ success: true, ...result.state });
+  });
+
+  // --- SYNC & DISASTER RESILIENCY ENDPOINTS (User Request 5) ---
+  app.post('/api/sync/push', async (req, res) => {
+    const incoming = req.body || {};
+    const result = await withDb((db) => {
+      mergeStateIntoDb(db, incoming);
+      const user = resolveUser(db, req);
+      return { status: 200, state: statePayload(db, user) };
+    });
+    res.json({ success: true, message: 'تم مزامنة وحفظ البيانات بنجاح.', ...result.state });
+  });
+
+  // Export full JSON backup
+  app.get('/api/admin/backup/export', requireAuth, requireRoles(['admin']), (_req, res) => {
+    const db = loadDb();
+    const cleanBackup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      church: 'مدرسة سانت بولس لدراسة الكتاب المقدس',
+      data: db,
+    };
+    res.setHeader('Content-Disposition', `attachment; filename=st-paul-backup-${todayIso()}.json`);
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(cleanBackup, null, 2));
+  });
+
+  // Restore backup from JSON
+  app.post('/api/admin/backup/restore', requireAuth, requireRoles(['admin']), async (req: AuthedRequest, res) => {
+    const backupData = req.body?.data || req.body;
+    if (!backupData || (!Array.isArray(backupData.users) && !Array.isArray(backupData.grades))) {
+      return jsonError(res, 400, 'صيغة ملف النسخة الاحتياطية غير صالحة.');
+    }
+    const result = await withDb((db) => {
+      mergeStateIntoDb(db, backupData);
+      pushNotif(db, {
+        title: 'استرجاع نسخة احتياطية',
+        message: 'تم استرجاع ومزامنة بيانات المدرسة بنجاح من النسخة الاحتياطية.',
+        type: 'post_approved',
+        audienceRoles: ['admin'],
+      });
+      return { status: 200, state: statePayload(db, req.user || null) };
+    });
+    res.json({ success: true, message: 'تم استعادة النسخة الاحتياطية بنجاح.', ...result.state });
   });
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

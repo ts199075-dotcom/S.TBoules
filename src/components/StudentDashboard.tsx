@@ -434,7 +434,7 @@ export const StudentDashboard: React.FC = () => {
           }`}
         >
           <Scroll className="w-4 h-4" />
-          <span>مستكشف أسفار الكتاب المقدس 📖</span>
+          <span>أسفار الكتاب المقدس 📖</span>
         </button>
       </div>
 
@@ -443,7 +443,7 @@ export const StudentDashboard: React.FC = () => {
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Selected Book Banner */}
           <div className="bg-gradient-to-r from-amber-900 via-amber-800 to-amber-950 text-white p-6 sm:p-7 rounded-3xl border border-amber-400/40 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📖</span>
                 <span className="text-xs bg-amber-400 text-amber-950 font-black px-2.5 py-0.5 rounded-full">
@@ -456,9 +456,23 @@ export const StudentDashboard: React.FC = () => {
               <h2 className="text-2xl sm:text-3xl font-black text-white">
                 منهج دراسة {selectedBook.title}
               </h2>
-              <p className="text-xs sm:text-sm text-amber-100/90 max-w-2xl leading-relaxed">
-                {selectedBook.theme}
-              </p>
+              {assignedBookForClass?.customOverview ? (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                    <span>✍️ نبذة وتوجيهات خاصة من خادم فصلك:</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-amber-100 font-medium leading-relaxed whitespace-pre-line bg-black/20 p-3 rounded-2xl border border-white/10">
+                    {assignedBookForClass.customOverview}
+                  </p>
+                  <div className="text-[11px] text-amber-300/80 pt-0.5">
+                    موضوع السفر العام: {selectedBook.theme}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-amber-100/90 max-w-2xl leading-relaxed">
+                  {selectedBook.theme}
+                </p>
+              )}
               <div className="text-xs text-amber-300/90 pt-1 font-serif italic">
                 «{selectedBook.keyVerse}»
               </div>
@@ -479,18 +493,12 @@ export const StudentDashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-amber-600" />
                   <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                    الحصص واللقاءات الدراسية المنشورة لفصلك ({publishedClassSessions.length} من ٨)
+                    الحصص واللقاءات الدراسية المنشورة لفصلك
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   كل حصة ينشرها خادم فصلك تجد فيها الآية الحافظة وشرح الدرس وملف المذكرة ودرجاتك المسجلة.
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-amber-900 dark:text-amber-300 font-bold bg-amber-100/80 dark:bg-amber-950/80 px-3 py-1 rounded-full border border-amber-300/40">
-                  {termStudentGrades.length} من {publishedClassSessions.length} حصص مرصودة
-                </span>
               </div>
             </div>
 
@@ -564,8 +572,30 @@ export const StudentDashboard: React.FC = () => {
                           )}
                         </div>
 
-                        {/* Memory Verse Golden Card */}
-                        {(session.memoryVerse || session.objective) && (
+                        {/* Memory Verses Golden Cards (User Request 4) */}
+                        {session.memoryVerses && session.memoryVerses.length > 0 ? (
+                          <div className="space-y-2">
+                            {session.memoryVerses.map((mv, vIdx) => (
+                              <div
+                                key={mv.id || `v-${vIdx}`}
+                                className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-amber-100/70 dark:from-amber-950/60 dark:to-amber-900/40 border border-amber-300/80 dark:border-amber-700/80 space-y-1"
+                              >
+                                <div className="flex items-center gap-1.5 text-xs font-black text-amber-900 dark:text-amber-200">
+                                  <Scroll className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                  <span>الآية الحافظة {session.memoryVerses!.length > 1 ? `(${vIdx + 1})` : ''}:</span>
+                                </div>
+                                <div className="text-xs sm:text-sm font-black text-amber-950 dark:text-amber-100 font-serif leading-relaxed pr-2 border-r-2 border-amber-500">
+                                  «{mv.verse}»
+                                </div>
+                                {mv.reference && (
+                                  <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 text-left pl-1 font-mono">
+                                    ({mv.reference})
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (session.memoryVerse || session.objective) ? (
                           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-amber-100/70 dark:from-amber-950/60 dark:to-amber-900/40 border border-amber-300/80 dark:border-amber-700/80 space-y-1">
                             <div className="flex items-center gap-1.5 text-xs font-black text-amber-900 dark:text-amber-200">
                               <Scroll className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -580,7 +610,7 @@ export const StudentDashboard: React.FC = () => {
                               </div>
                             )}
                           </div>
-                        )}
+                        ) : null}
 
                         {/* Lesson Explanation / Spiritual Points */}
                         {session.lessonSummary && (
@@ -1000,7 +1030,7 @@ export const StudentDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: HOLY BIBLE CANON EXPLORER («مستكشف أسفار الكتاب المقدس 📖») */}
+      {/* TAB 3: HOLY BIBLE CANON EXPLORER («أسفار الكتاب المقدس 📖») */}
       {studentTab === 'canon' && (
         <div id="bible-canon-explorer-section" className="space-y-4 animate-in fade-in duration-200">
           <div className="p-4 bg-amber-50 dark:bg-amber-950/50 rounded-2xl border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200">

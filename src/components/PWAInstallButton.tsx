@@ -10,7 +10,7 @@ export const PWAInstallButton: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
-  const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     // Check if running in standalone mode (already installed WebApp)
@@ -32,6 +32,7 @@ export const PWAInstallButton: React.FC = () => {
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      setShowGuide(false);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
@@ -44,18 +45,17 @@ export const PWAInstallButton: React.FC = () => {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) {
-      if (isIOS) {
-        setShowIOSGuide(true);
+    if (deferredPrompt) {
+      await deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsInstalled(true);
+        setDeferredPrompt(null);
+        return;
       }
-      return;
     }
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-    }
+    // If browser prompt is not immediately ready, show the guided install modal
+    setShowGuide(true);
   };
 
   if (isInstalled) return null;
@@ -65,26 +65,32 @@ export const PWAInstallButton: React.FC = () => {
       <button
         onClick={handleInstallClick}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold text-xs shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95"
-        title="تثبيت المنصة كتطبيق على الهاتف أو الكمبيوتر (PWA WebApp)"
+        title="تثبيت المنصة كتطبيق أندرويد أصلي (PWA WebApp)"
       >
-        <Download className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">تثبيت التطبيق 📱</span>
-        <span className="sm:hidden">تثبيت 📱</span>
+        <Smartphone className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">تثبيت التطبيق للأندرويد 📱</span>
+        <span className="sm:hidden">تطبيق أندرويد 📱</span>
       </button>
 
-      {/* iOS Safari Guide Modal */}
-      {showIOSGuide && (
-        <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-sm bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-4 text-right">
+      {/* Guided Native App Installation Modal (Android / iOS / Desktop) */}
+      {showGuide && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs"
+          onClick={() => setShowGuide(false)}
+        >
+          <div
+            className="relative w-full max-w-sm bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-4 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
               <div className="flex items-center gap-2">
                 <Smartphone className="w-5 h-5 text-amber-600" />
                 <h4 className="font-bold text-sm text-stone-900 dark:text-stone-100">
-                  تثبيت المنصة على الآيفون والآيباد
+                  {isIOS ? 'تثبيت المنصة على الآيفون والآيباد' : 'تثبيت المنصة كتطبيق أندرويد (Native App)'}
                 </h4>
               </div>
               <button
-                onClick={() => setShowIOSGuide(false)}
+                onClick={() => setShowGuide(false)}
                 className="w-7 h-7 rounded-full bg-stone-100 dark:bg-stone-800 flex items-center justify-center text-stone-500 hover:text-stone-900 dark:hover:text-white"
               >
                 <X className="w-4 h-4" />
@@ -92,29 +98,46 @@ export const PWAInstallButton: React.FC = () => {
             </div>
 
             <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-              لتثبيت مدرسة سانت بولس كتطبيق مستقل على شاشتك الرئيسية:
+              لتثبيت مدرسة سانت بولس كتطبيق مستقل على شاشة هاتفك الرئيسية يعمل بكفاءة التطبيقات الأصلية وبدون شريط المتصفح:
             </p>
 
-            <div className="space-y-2.5 text-xs text-stone-700 dark:text-stone-300">
-              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
-                <span className="font-black text-amber-800 dark:text-amber-400">١.</span>
-                <span>اضغط على زر <strong>المشاركة (Share ⬆️)</strong> في أسفل شريط متصفح سفاري Safari.</span>
+            {isIOS ? (
+              <div className="space-y-2.5 text-xs text-stone-700 dark:text-stone-300">
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
+                  <span className="font-black text-amber-800 dark:text-amber-400">١.</span>
+                  <span>اضغط على زر <strong>المشاركة (Share ⬆️)</strong> في أسفل شريط متصفح سفاري Safari.</span>
+                </div>
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
+                  <span className="font-black text-amber-800 dark:text-amber-400">٢.</span>
+                  <span>اختر <strong>«إضافة إلى الشاشة الرئيسية» (Add to Home Screen)</strong>.</span>
+                </div>
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
+                  <span className="font-black text-amber-800 dark:text-amber-400">٣.</span>
+                  <span>اضغط <strong>إضافة (Add)</strong> بالأعلى لتظهر أيقونة سانت بولس بين تطبيقاتك.</span>
+                </div>
               </div>
-              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
-                <span className="font-black text-amber-800 dark:text-amber-400">٢.</span>
-                <span>اختر <strong>«إضافة إلى الشاشة الرئيسية» (Add to Home Screen)</strong>.</span>
+            ) : (
+              <div className="space-y-2.5 text-xs text-stone-700 dark:text-stone-300">
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
+                  <span className="font-black text-amber-800 dark:text-amber-400">١.</span>
+                  <span>اضغط على <strong>قائمة النقاط الثلاث (⋮)</strong> في متصفح كروم أعلى أو أسفل الشاشة.</span>
+                </div>
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
+                  <span className="font-black text-amber-800 dark:text-amber-400">٢.</span>
+                  <span>اختر <strong>«تثبيت التطبيق» (Install app)</strong> أو <strong>«إضافة إلى الشاشة الرئيسية»</strong>.</span>
+                </div>
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
+                  <span className="font-black text-amber-800 dark:text-amber-400">٣.</span>
+                  <span>اضغط <strong>تثبيت (Install)</strong> وسيتم تثبيت التطبيق على جهازك كأي تطبيق أندرويد عادي مع الإشعارات ودعم العمل دون إنترنت.</span>
+                </div>
               </div>
-              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 dark:bg-stone-800/80 border border-amber-200 dark:border-stone-700">
-                <span className="font-black text-amber-800 dark:text-amber-400">٣.</span>
-                <span>اضغط <strong>إضافة (Add)</strong> بالأعلى لتظهر أيقونة سانت بولس بين تطبيقاتك.</span>
-              </div>
-            </div>
+            )}
 
             <button
-              onClick={() => setShowIOSGuide(false)}
-              className="w-full py-2.5 rounded-xl bg-stone-900 dark:bg-amber-700 text-white font-bold text-xs shadow-xs"
+              onClick={() => setShowGuide(false)}
+              className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
             >
-              فهمت، حسناً
+              فهمت، حسناً ✅
             </button>
           </div>
         </div>

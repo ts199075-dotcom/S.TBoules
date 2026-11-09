@@ -55,8 +55,14 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-amber-50 dark:bg-stone-900 rounded-3xl shadow-2xl border-4 border-amber-600/40 p-5 sm:p-8 text-stone-900 dark:text-stone-100 print:m-0 print:border-none print:shadow-none print:p-8">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-xs overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-3xl bg-amber-50 dark:bg-stone-900 rounded-3xl shadow-2xl border-4 border-amber-600/40 p-5 sm:p-8 text-stone-900 dark:text-stone-100 print:m-0 print:border-none print:shadow-none print:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close & Print Buttons */}
         <div className="flex items-center justify-between pb-4 border-b border-amber-200 dark:border-stone-800 print:hidden">
           {isCompleted8Sessions ? (

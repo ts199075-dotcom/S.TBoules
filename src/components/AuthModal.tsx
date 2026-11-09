@@ -218,7 +218,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
 
           {errorMsg && (
-            <div className="m-4 mb-0 p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2" role="alert">
+            <div
+              className={`m-4 mb-0 p-3 rounded-xl border text-xs font-bold flex items-center gap-2.5 animate-in fade-in ${
+                errorMsg.includes('انتظار موافقة')
+                  ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300'
+              }`}
+              role="alert"
+            >
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -345,7 +352,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {role === 'student' ? (
                   <div>
                     <label htmlFor="reg-guardian" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
-                      هاتف ولي الأمر
+                      هاتف ولي الأمر (اختياري)
                     </label>
                     <input
                       id="reg-guardian"
@@ -361,19 +368,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 ) : (
                   <div>
                     <label htmlFor="reg-father" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
-                      أب الاعتراف
+                      اسم الأب الكاهن / أب الاعتراف
                     </label>
                     <input
                       id="reg-father"
                       autoComplete="off"
                       className="input-field"
-                      placeholder="اسم أب الاعتراف (مثال: أبونا ميخائيل)"
+                      placeholder="مثال: أبونا كيرلس أو أبونا ميخائيل"
                       value={confessionFather}
                       onChange={(e) => setConfessionFather(e.target.value)}
                     />
                   </div>
                 )}
               </div>
+
+              {role === 'student' && (
+                <div>
+                  <label htmlFor="reg-father-student" className="block text-stone-700 dark:text-stone-300 mb-1 font-semibold">
+                    اسم الأب الكاهن / أب الاعتراف <span className="text-stone-400 font-normal">(اختياري)</span>
+                  </label>
+                  <input
+                    id="reg-father-student"
+                    autoComplete="off"
+                    className="input-field"
+                    placeholder="اسم أب الاعتراف (مثال: أبونا كيرلس، أبونا بولا...)"
+                    value={confessionFather}
+                    onChange={(e) => setConfessionFather(e.target.value)}
+                  />
+                </div>
+              )}
 
               {(role === 'student' || role === 'servant') && (
                 <fieldset>

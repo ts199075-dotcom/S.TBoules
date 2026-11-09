@@ -318,10 +318,15 @@ export const ServantsSection: React.FC<ServantsSectionProps> = ({
         )}
       </div>
 
-      {/* SERVANT DETAILED PROFILE MODAL */}
       {selectedServant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-5 text-right max-h-[92vh] flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-xs overflow-y-auto"
+          onClick={() => setSelectedServant(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-5 text-right max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4 shrink-0">
               <div className="flex items-center gap-3">
@@ -588,8 +593,14 @@ export const ServantsSection: React.FC<ServantsSectionProps> = ({
 
       {/* CONFIRMATION MODAL: DELETE SERVANT PERMANENTLY */}
       {servantToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs animate-fade-in">
-          <div className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-4 text-right">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-xs animate-fade-in"
+          onClick={() => setServantToDelete(null)}
+        >
+          <div
+            className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-6 space-y-4 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
               <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
                 <Trash2 className="w-5 h-5 shrink-0" />

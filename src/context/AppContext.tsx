@@ -12,6 +12,7 @@ import {
   LibraryBook,
   AcademicTerm,
   ClassAssignedBook,
+  ChurchEvent,
 } from '../types';
 import {
   CLASSES_LIST,
@@ -50,6 +51,13 @@ interface AppContextType {
   notifications: AppNotification[];
   lessonPosts: ServantLessonPost[];
   libraryBooks: LibraryBook[];
+  churchEvents: ChurchEvent[];
+  addChurchEvent: (eventData: Omit<ChurchEvent, 'id' | 'createdAt'>) => Promise<ChurchEvent>;
+  updateChurchEvent: (id: string, updates: Partial<ChurchEvent>) => Promise<void>;
+  deleteChurchEvent: (id: string) => Promise<void>;
+  exportBackupJson: () => void;
+  restoreBackupJson: (file: File) => Promise<{ success: boolean; message: string }>;
+  forceSyncDatabase: () => Promise<void>;
   theme: 'light' | 'dark';
   backendStatus: BackendStatus;
   toggleTheme: () => void;
@@ -131,6 +139,7 @@ const STORAGE_KEYS = {
   THEME: 'st_paul_theme_v6',
   TERMS: 'st_paul_terms_v6',
   ASSIGNED_BOOKS: 'st_paul_assigned_books_v6',
+  EVENTS: 'st_paul_events_v6',
 };
 
 type RemoteState = {
@@ -146,6 +155,7 @@ type RemoteState = {
   lessonPosts?: ServantLessonPost[];
   libraryBooks?: LibraryBook[];
   yearWorkApprovedClasses?: Record<string, boolean>;
+  churchEvents?: ChurchEvent[];
 };
 
 // Clean legacy localStorage keys from prior versions to remove dummy mocks
@@ -195,6 +205,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [libraryBooks, setLibraryBooks] = useState<LibraryBook[]>(() =>
     readStoredJson(STORAGE_KEYS.LIBRARY, INITIAL_LIBRARY_BOOKS)
   );
+  const [churchEvents, setChurchEvents] = useState<ChurchEvent[]>(() =>
+    readStoredJson(STORAGE_KEYS.EVENTS, [])
+  );
 
   const [yearWorkApprovedClasses, setYearWorkApprovedClasses] = useState<Record<string, boolean>>({});
 
@@ -206,22 +219,193 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else if (state.currentUser === null && !getApiToken()) {
       setCurrentUserId('');
     }
-    if (Array.isArray(state.users)) setUsers(state.users);
+
+    // Smart merge users to prevent data wipe when server restarts
+    if (Array.isArray(state.users)) {
+      setUsers((prevLocalUsers) => {
+        const userMap = new Map<string, UserProfile>();
+        for (const u of state.users) {
+          if (u && u.id) userMap.set(u.id, u);
+        }
+        const missingOnServer: UserProfile[] = [];
+        for (const lu of prevLocalUsers) {
+          if (lu && lu.id && !userMap.has(lu.id)) {
+            userMap.set(lu.id, lu);
+            missingOnServer.push(lu);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ users: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(userMap.values());
+      });
+    }
+
     if (Array.isArray(state.academicTerms) && state.academicTerms.length > 0) {
       setAcademicTerms(state.academicTerms);
     }
     if (state.classAssignedBooks && typeof state.classAssignedBooks === 'object') {
       setClassAssignedBooks(state.classAssignedBooks);
     }
-    if (Array.isArray(state.sessions)) setSessions(state.sessions);
-    if (Array.isArray(state.grades)) setGrades(state.grades);
-    if (state.finalExamScores && typeof state.finalExamScores === 'object') setFinalExamScores(state.finalExamScores);
-    if (Array.isArray(state.servantSubmissions)) setServantSubmissions(state.servantSubmissions);
+
+    // Merge sessions
+    if (Array.isArray(state.sessions)) {
+      setSessions((prevLocalSessions) => {
+        const sMap = new Map<string, BibleSession>();
+        for (const s of state.sessions) {
+          if (s && s.id) sMap.set(s.id, s);
+        }
+        const missingOnServer: BibleSession[] = [];
+        for (const ls of prevLocalSessions) {
+          if (ls && ls.id && !sMap.has(ls.id)) {
+            sMap.set(ls.id, ls);
+            missingOnServer.push(ls);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ sessions: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(sMap.values());
+      });
+    }
+
+    // Merge grades
+    if (Array.isArray(state.grades)) {
+      setGrades((prevLocalGrades) => {
+        const gradeMap = new Map<string, SessionGrade>();
+        for (const g of state.grades) {
+          if (g && g.sessionId && g.studentId) {
+            gradeMap.set(`${g.sessionId}_${g.studentId}`, g);
+          }
+        }
+        const missingOnServer: SessionGrade[] = [];
+        for (const lg of prevLocalGrades) {
+          const key = `${lg.sessionId}_${lg.studentId}`;
+          if (!gradeMap.has(key)) {
+            gradeMap.set(key, lg);
+            missingOnServer.push(lg);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ grades: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(gradeMap.values());
+      });
+    }
+
+    if (state.finalExamScores && typeof state.finalExamScores === 'object') {
+      setFinalExamScores((prev) => ({ ...prev, ...state.finalExamScores }));
+    }
+
+    // Merge servantSubmissions
+    if (Array.isArray(state.servantSubmissions)) {
+      setServantSubmissions((prevSubs) => {
+        const subMap = new Map<string, ServantAttendanceSubmission>();
+        for (const s of state.servantSubmissions) {
+          if (s && s.id) subMap.set(s.id, s);
+        }
+        const missingOnServer: ServantAttendanceSubmission[] = [];
+        for (const ls of prevSubs) {
+          if (ls && ls.id && !subMap.has(ls.id)) {
+            subMap.set(ls.id, ls);
+            missingOnServer.push(ls);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ servantSubmissions: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(subMap.values());
+      });
+    }
+
     if (Array.isArray(state.notifications)) setNotifications(state.notifications);
-    if (Array.isArray(state.lessonPosts)) setLessonPosts(state.lessonPosts);
-    if (Array.isArray(state.libraryBooks)) setLibraryBooks(state.libraryBooks);
+
+    // Merge lessonPosts
+    if (Array.isArray(state.lessonPosts)) {
+      setLessonPosts((prevPosts) => {
+        const pMap = new Map<string, ServantLessonPost>();
+        for (const p of state.lessonPosts) {
+          if (p && p.id) pMap.set(p.id, p);
+        }
+        const missingOnServer: ServantLessonPost[] = [];
+        for (const lp of prevPosts) {
+          if (lp && lp.id && !pMap.has(lp.id)) {
+            pMap.set(lp.id, lp);
+            missingOnServer.push(lp);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ lessonPosts: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(pMap.values());
+      });
+    }
+
+    // Merge libraryBooks
+    if (Array.isArray(state.libraryBooks)) {
+      setLibraryBooks((prevBooks) => {
+        const bMap = new Map<string, LibraryBook>();
+        for (const b of state.libraryBooks) {
+          if (b && b.id) bMap.set(b.id, b);
+        }
+        const missingOnServer: LibraryBook[] = [];
+        for (const lb of prevBooks) {
+          if (lb && lb.id && !bMap.has(lb.id)) {
+            bMap.set(lb.id, lb);
+            missingOnServer.push(lb);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ libraryBooks: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(bMap.values());
+      });
+    }
+
+    // Merge churchEvents
+    if (Array.isArray(state.churchEvents)) {
+      setChurchEvents((prevLocalEvents) => {
+        const evtMap = new Map<string, ChurchEvent>();
+        for (const e of state.churchEvents) {
+          if (e && e.id) evtMap.set(e.id, e);
+        }
+        const missingOnServer: ChurchEvent[] = [];
+        for (const le of prevLocalEvents) {
+          if (le && le.id && !evtMap.has(le.id)) {
+            evtMap.set(le.id, le);
+            missingOnServer.push(le);
+          }
+        }
+        if (missingOnServer.length > 0) {
+          void apiRequest('/api/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({ churchEvents: missingOnServer }),
+          }).catch(() => undefined);
+        }
+        return Array.from(evtMap.values());
+      });
+    }
+
     if (state.yearWorkApprovedClasses && typeof state.yearWorkApprovedClasses === 'object') {
-      setYearWorkApprovedClasses(state.yearWorkApprovedClasses);
+      setYearWorkApprovedClasses((prev) => ({ ...prev, ...state.yearWorkApprovedClasses }));
     }
   }, []);
 
@@ -301,6 +485,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     writeStoredJson(STORAGE_KEYS.ASSIGNED_BOOKS, classAssignedBooks);
   }, [classAssignedBooks]);
+  useEffect(() => {
+    writeStoredJson(STORAGE_KEYS.EVENTS, churchEvents);
+  }, [churchEvents]);
 
   const currentUser = users.find((u) => u.id === currentUserId) || null;
   const toggleTheme = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
@@ -351,10 +538,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (found.status === 'pending') {
       return {
         success: false,
-        message:
-          found.role === 'servant'
-            ? 'حساب الخادم قيد المراجعة والموافقة من قِبل أمين الخدمة. برجاء الانتظار حتى يتم اعتماد الحساب.'
-            : 'طلب التحاق المخدوم قيد المراجعة والاعتماد من أمين الخدمة. سيتم التفعيل قريباً.',
+        message: 'أسف، برجاء انتظار موافقة أمين الخدمة على حسابك أولاً',
       };
     }
     const expectedPassword = found.password || found.phone;
@@ -371,8 +555,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const logout = () => {
     if (backendStatus === 'online') {
       void apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-      setApiToken('');
     }
+    setApiToken('');
     setCurrentUserId('');
     try {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
@@ -388,14 +572,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         method: 'POST',
         body: JSON.stringify(data),
       });
-      const registeredUser = (payload as any)?.user || (payload as any)?.currentUser;
-      if (registeredUser?.id) {
-        setCurrentUserId(registeredUser.id);
-        try {
-          localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, registeredUser.id);
-        } catch {
-          /* ignore */
-        }
+      const registeredUser = (payload as any)?.user;
+      // Pending accounts must NOT be logged in!
+      setCurrentUserId('');
+      setApiToken('');
+      try {
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+      } catch {
+        /* ignore */
       }
       return (registeredUser as UserProfile) || users[0];
     }
@@ -429,19 +613,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const approveUser = (userId: string) => {
     if (currentUser?.id === userId) return;
-    if (backendStatus === 'online') {
-      void remote(`/api/users/${userId}/approve`, { method: 'POST' });
-      return;
-    }
+    const target = users.find((u) => u.id === userId);
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, status: 'active' } : u)));
+    // Decrement notification count by marking registration notification as read
+    setNotifications((prev) =>
+      prev.map((n) =>
+        (n.type === 'new_student' && target && n.message.includes(target.name)) || n.audienceUserId === userId
+          ? { ...n, read: true }
+          : n
+      )
+    );
+    if (backendStatus === 'online') {
+      void remote(`/api/users/${userId}/approve`, { method: 'POST' }).then((res: any) => {
+        if (res?.notifications) setNotifications(res.notifications);
+      });
+    }
   };
 
   const rejectUser = (userId: string) => {
-    if (backendStatus === 'online') {
-      void remote(`/api/users/${userId}/reject`, { method: 'POST' });
-      return;
-    }
+    const target = users.find((u) => u.id === userId);
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, status: 'rejected' } : u)));
+    // Decrement notification count by marking registration notification as read
+    setNotifications((prev) =>
+      prev.map((n) =>
+        (n.type === 'new_student' && target && n.message.includes(target.name)) || n.audienceUserId === userId
+          ? { ...n, read: true }
+          : n
+      )
+    );
+    if (backendStatus === 'online') {
+      void remote(`/api/users/${userId}/reject`, { method: 'POST' }).then((res: any) => {
+        if (res?.notifications) setNotifications(res.notifications);
+      });
+    }
   };
 
   const toggleAssistantRole = (userId: string) => {
@@ -824,17 +1028,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prepAttachmentType: data.prepAttachmentType,
       prepAttachmentData: data.prepAttachmentData,
       prepNotes: data.prepNotes,
+      classId: currentUser.classId,
       submittedAt: new Date().toLocaleString('ar-EG'),
       viewedByAdmin: false,
     };
-    if (backendStatus === 'online') {
-      void remote('/api/servant/check-in', {
-        method: 'POST',
-        body: JSON.stringify({ ...newSub, classId: currentUser.classId }),
-      });
-      return;
-    }
+
+    // 1. Immediately update state so it is pinned in the UI for both servant and admin
     setServantSubmissions((prev) => [newSub, ...prev.filter((s) => s.servantId !== currentUser.id)]);
+
     if (data.status === 'attending' && (data.prepTitle || data.prepAttachmentName)) {
       const localPost: ServantLessonPost = {
         id: `post-prep-${Date.now()}`,
@@ -851,6 +1052,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         status: 'pending_approval',
       };
       setLessonPosts((prev) => [localPost, ...prev]);
+    }
+
+    // 2. Server synchronization
+    if (backendStatus === 'online') {
+      void remote('/api/servant/check-in', {
+        method: 'POST',
+        body: JSON.stringify({ ...newSub, classId: currentUser.classId }),
+      }).then((res: any) => {
+        if (res?.servantSubmissions) {
+          setServantSubmissions(res.servantSubmissions);
+        }
+      });
     }
   };
 
@@ -935,11 +1148,136 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const approveLessonPost = (postId: string) => {
+  const addChurchEvent = async (eventData: Omit<ChurchEvent, 'id' | 'createdAt'>): Promise<ChurchEvent> => {
+    const newEvent: ChurchEvent = {
+      ...eventData,
+      id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      createdAt: new Date().toISOString().split('T')[0],
+      createdBy: currentUser?.name || 'أمين الخدمة',
+    };
+    setChurchEvents((prev) => [newEvent, ...prev]);
     if (backendStatus === 'online') {
-      void remote(`/api/posts/${postId}/approve`, { method: 'POST' });
-      return;
+      try {
+        await remote('/api/events', {
+          method: 'POST',
+          body: JSON.stringify(newEvent),
+        });
+      } catch (e) {
+        console.error('Failed to save event to server:', e);
+      }
     }
+    return newEvent;
+  };
+
+  const updateChurchEvent = async (id: string, updates: Partial<ChurchEvent>) => {
+    setChurchEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
+    if (backendStatus === 'online') {
+      try {
+        await remote(`/api/events/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(updates),
+        });
+      } catch (e) {
+        console.error('Failed to update event on server:', e);
+      }
+    }
+  };
+
+  const deleteChurchEvent = async (id: string) => {
+    setChurchEvents((prev) => prev.filter((e) => e.id !== id));
+    if (backendStatus === 'online') {
+      try {
+        await remote(`/api/events/${id}`, { method: 'DELETE' });
+      } catch (e) {
+        console.error('Failed to delete event on server:', e);
+      }
+    }
+  };
+
+  const exportBackupJson = () => {
+    const backupObj = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      school: 'مدرسة سانت بولس لدراسة الكتاب المقدس',
+      data: {
+        users,
+        sessions,
+        grades,
+        finalExamScores,
+        servantSubmissions,
+        notifications,
+        lessonPosts,
+        libraryBooks,
+        churchEvents,
+        academicTerms,
+        classAssignedBooks,
+        yearWorkApprovedClasses,
+      },
+    };
+    const jsonStr = JSON.stringify(backupObj, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `st-paul-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const restoreBackupJson = async (file: File): Promise<{ success: boolean; message: string }> => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const data = parsed.data || parsed;
+      if (!data || (!Array.isArray(data.users) && !Array.isArray(data.grades))) {
+        return { success: false, message: 'صيغة ملف النسخة الاحتياطية غير صالحة.' };
+      }
+      if (Array.isArray(data.users)) setUsers(data.users);
+      if (Array.isArray(data.sessions)) setSessions(data.sessions);
+      if (Array.isArray(data.grades)) setGrades(data.grades);
+      if (data.finalExamScores) setFinalExamScores(data.finalExamScores);
+      if (Array.isArray(data.churchEvents)) setChurchEvents(data.churchEvents);
+      if (Array.isArray(data.lessonPosts)) setLessonPosts(data.lessonPosts);
+      if (Array.isArray(data.libraryBooks)) setLibraryBooks(data.libraryBooks);
+      if (Array.isArray(data.academicTerms)) setAcademicTerms(data.academicTerms);
+
+      if (backendStatus === 'online') {
+        await apiRequest('/api/admin/backup/restore', {
+          method: 'POST',
+          body: JSON.stringify({ data }),
+        });
+      }
+      return { success: true, message: `تم استعادة النسخة الاحتياطية بنجاح (${data.users?.length || 0} مستخدم، ${data.grades?.length || 0} درجات).` };
+    } catch (err: any) {
+      return { success: false, message: 'تعذر قراءة ملف النسخة الاحتياطية: ' + (err?.message || '') };
+    }
+  };
+
+  const forceSyncDatabase = async () => {
+    try {
+      await apiRequest('/api/sync/push', {
+        method: 'POST',
+        body: JSON.stringify({
+          users,
+          sessions,
+          grades,
+          finalExamScores,
+          churchEvents,
+          lessonPosts,
+          libraryBooks,
+          academicTerms,
+          classAssignedBooks,
+        }),
+      });
+    } catch (e) {
+      console.error('Force sync error:', e);
+    }
+  };
+
+  const approveLessonPost = (postId: string) => {
+    const post = lessonPosts.find((p) => p.id === postId);
     setLessonPosts((prev) =>
       prev.map((p) =>
         p.id === postId
@@ -947,16 +1285,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           : p
       )
     );
+    if (post) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.type === 'post_pending' && n.message.includes(post.title) ? { ...n, read: true } : n))
+      );
+    }
+    if (backendStatus === 'online') {
+      void remote(`/api/posts/${postId}/approve`, { method: 'POST' }).then((res: any) => {
+        if (res?.notifications) setNotifications(res.notifications);
+      });
+    }
   };
 
   const rejectLessonPost = (postId: string, reason?: string) => {
-    if (backendStatus === 'online') {
-      void remote(`/api/posts/${postId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
-      return;
-    }
+    const post = lessonPosts.find((p) => p.id === postId);
     setLessonPosts((prev) =>
       prev.map((p) => (p.id === postId ? { ...p, status: 'rejected', rejectionReason: reason || 'مرفوض من أمانة الخدمة' } : p))
     );
+    if (post) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.type === 'post_pending' && n.message.includes(post.title) ? { ...n, read: true } : n))
+      );
+    }
+    if (backendStatus === 'online') {
+      void remote(`/api/posts/${postId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }).then((res: any) => {
+        if (res?.notifications) setNotifications(res.notifications);
+      });
+    }
   };
 
   const getStudentScoreSummary = (studentId: string, termId?: string): StudentScoreSummary =>
@@ -1042,6 +1397,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notifications,
         lessonPosts,
         libraryBooks,
+        churchEvents,
+        addChurchEvent,
+        updateChurchEvent,
+        deleteChurchEvent,
+        exportBackupJson,
+        restoreBackupJson,
+        forceSyncDatabase,
         theme,
         backendStatus,
         toggleTheme,

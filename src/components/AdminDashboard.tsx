@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ClassId, SessionGrade, UserProfile, BibleSession, ServantLessonPost } from '../types';
+import { ClassId, SessionGrade, UserProfile, BibleSession, ServantLessonPost, ChurchEvent } from '../types';
 import { sessionTotal } from '../lib/scores';
 import {
   Shield,
@@ -37,6 +37,10 @@ import {
   PartyPopper,
   Megaphone,
   BookMarked,
+  Database,
+  UploadCloud,
+  Save,
+  MapPin,
 } from 'lucide-react';
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
@@ -65,6 +69,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     servantSubmissions,
     lessonPosts,
     libraryBooks,
+    churchEvents,
+    addChurchEvent,
+    updateChurchEvent,
+    deleteChurchEvent,
+    exportBackupJson,
+    restoreBackupJson,
+    forceSyncDatabase,
     approveUser,
     rejectUser,
     toggleAssistantRole,
@@ -107,7 +118,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newPostVerse, setNewPostVerse] = useState('');
   const [newPostContent, setNewPostContent] = useState('');
   const [newPostAttachment, setNewPostAttachment] = useState('');
+  const [newPostFileData, setNewPostFileData] = useState('');
+  const [newPostFileType, setNewPostFileType] = useState('');
+  const [newPostFileSize, setNewPostFileSize] = useState('');
   const [postPublishedSuccess, setPostPublishedSuccess] = useState(false);
+
+  // Church Events State (CRUD requested by user)
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [eventTitle, setEventTitle] = useState('');
+  const [eventDate, setEventDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [eventTime, setEventTime] = useState('');
+  const [eventLocation, setEventLocation] = useState('');
+  const [eventDescription, setEventDescription] = useState('');
+  const [eventType, setEventType] = useState<ChurchEvent['type']>('celebration');
+  const [eventAudience, setEventAudience] = useState<'all' | 'students' | 'servants'>('all');
+  const [eventTargetClass, setEventTargetClass] = useState<ClassId | 'all_classes'>('all_classes');
+  const [eventStatus, setEventStatus] = useState<'upcoming' | 'ongoing' | 'completed'>('upcoming');
+  const [eventToDelete, setEventToDelete] = useState<ChurchEvent | null>(null);
+
+  // Backup & Storage Persistence State
+  const [backupRestoreLoading, setBackupRestoreLoading] = useState(false);
+  const [backupStatusMessage, setBackupStatusMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
@@ -116,6 +148,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   React.useEffect(() => {
     if (initialClassId) setSelectedClassId(initialClassId);
   }, [initialClassId]);
+
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNewPostAttachment(file.name);
+    setNewPostFileType(file.type || 'application/pdf');
+    setNewPostFileSize(`${(file.size / 1024).toFixed(0)} كيلوبايت`);
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      setNewPostFileData(loadEvt.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePdf = () => {
+    setNewPostFileData('');
+    setNewPostFileType('');
+    setNewPostFileSize('');
+    setNewPostAttachment('');
+  };
 
   const handleAdminCreatePost = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +179,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       bibleVerse: newPostVerse.trim(),
       content: newPostContent.trim(),
       attachmentName: newPostAttachment.trim() || undefined,
+      fileData: newPostFileData || undefined,
+      fileType: newPostFileType || undefined,
       classId: newPostTargetClass,
       targetAudience: newPostAudience,
       targetScope: newPostScope,
@@ -136,11 +190,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewPostVerse('');
     setNewPostContent('');
     setNewPostAttachment('');
+    setNewPostFileData('');
+    setNewPostFileType('');
+    setNewPostFileSize('');
     setNewPostAudience('all');
     setNewPostScope('specific_class');
     setNewPostModalOpen(false);
     setPostPublishedSuccess(true);
     setTimeout(() => setPostPublishedSuccess(false), 5000);
+  };
+
+  const handleOpenAddEvent = () => {
+    setEditingEventId(null);
+    setEventTitle('');
+    setEventDate(new Date().toISOString().split('T')[0]);
+    setEventTime('');
+    setEventLocation('');
+    setEventDescription('');
+    setEventType('celebration');
+    setEventAudience('all');
+    setEventTargetClass('all_classes');
+    setEventStatus('upcoming');
+    setEventModalOpen(true);
+  };
+
+  const handleOpenEditEvent = (evt: ChurchEvent) => {
+    setEditingEventId(evt.id);
+    setEventTitle(evt.title);
+    setEventDate(evt.date);
+    setEventTime(evt.time || '');
+    setEventLocation(evt.location || '');
+    setEventDescription(evt.description);
+    setEventType(evt.type);
+    setEventAudience(evt.targetAudience);
+    setEventTargetClass(evt.targetClassId || 'all_classes');
+    setEventStatus(evt.status);
+    setEventModalOpen(true);
+  };
+
+  const handleSaveEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventTitle.trim()) return;
+    if (editingEventId) {
+      await updateChurchEvent(editingEventId, {
+        title: eventTitle.trim(),
+        date: eventDate,
+        time: eventTime.trim() || undefined,
+        location: eventLocation.trim() || undefined,
+        description: eventDescription.trim(),
+        type: eventType,
+        targetAudience: eventAudience,
+        targetClassId: eventTargetClass,
+        status: eventStatus,
+      });
+    } else {
+      await addChurchEvent({
+        title: eventTitle.trim(),
+        date: eventDate,
+        time: eventTime.trim() || undefined,
+        location: eventLocation.trim() || undefined,
+        description: eventDescription.trim(),
+        type: eventType,
+        targetAudience: eventAudience,
+        targetClassId: eventTargetClass,
+        status: eventStatus,
+      });
+    }
+    setEventModalOpen(false);
+  };
+
+  const handleConfirmDeleteEvent = async () => {
+    if (!eventToDelete) return;
+    await deleteChurchEvent(eventToDelete.id);
+    setEventToDelete(null);
+  };
+
+  const handleRestoreFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBackupRestoreLoading(true);
+    setBackupStatusMessage(null);
+    const res = await restoreBackupJson(file);
+    setBackupRestoreLoading(false);
+    setBackupStatusMessage(res.message);
+    setTimeout(() => setBackupStatusMessage(null), 7000);
+    // Clear input
+    e.target.value = '';
+  };
+
+  const handleForceSync = async () => {
+    setBackupRestoreLoading(true);
+    await forceSyncDatabase();
+    setBackupRestoreLoading(false);
+    setBackupStatusMessage('تم مزامنة وحفظ قاعدة البيانات بنجاح على السيرفر والقرص الدائم ✅');
+    setTimeout(() => setBackupStatusMessage(null), 5000);
   };
 
   // Strict check: only admin can view this dashboard
@@ -1316,9 +1459,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <FileText className="w-4 h-4 shrink-0 text-emerald-600" />
                             <span className="truncate">ملف مرفق: {sub.prepAttachmentName}</span>
                           </div>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 shrink-0">
-                            مرفوع ومحفوظ ✅
-                          </span>
+                          {sub.prepAttachmentData ? (
+                            <a
+                              href={sub.prepAttachmentData}
+                              download={sub.prepAttachmentName}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer shrink-0"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>تحميل التحضير 📥</span>
+                            </a>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 shrink-0">
+                              مرفوع ومحفوظ ✅
+                            </span>
+                          )}
                         </div>
                       )}
 
@@ -1559,103 +1713,232 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* TAB 8: الحفلات والمناسبات والتكريمات */}
+      {/* TAB 8: الحفلات والمناسبات والتكريمات (ديناميكية بالكامل مع إمكانية الإضافة والتعديل والحذف) */}
       {activeTab === 'events' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <PartyPopper className="w-5 h-5 text-purple-600" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  أجندة الحفلات السنوية والتكريمات والمناسبات الكنسية
-                </h3>
+        <div className="space-y-6">
+          {/* Database Backup & Disaster Recovery Section (User Request 5 & 9) */}
+          <div className="bg-gradient-to-r from-slate-900 via-stone-900 to-amber-950 rounded-3xl p-6 sm:p-7 text-white border border-amber-600/30 shadow-lg space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-800 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Database className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base sm:text-lg font-bold text-amber-100">
+                    حفظ النسخ الاحتياطية وحماية قاعدة البيانات الدائمة 💾
+                  </h3>
+                </div>
+                <p className="text-xs text-stone-300 leading-relaxed">
+                  يضمن هذا النظام عدم مسح أي بيانات أو طلاب حتى لو سجل 500+ طالب؛ مع إمكانية تنزيل نسخة احتياطية كاملة واسترجاعها بنقرة واحدة.
+                </p>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                متابعة احتفالات ختام العام، يوم التكريم، وتوزيع الجوائز وشهادات التقدير التذكارية.
-              </p>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>المسجلون حالياً: {users.length} مستخدم</span>
+                </span>
+              </div>
+            </div>
+
+            {backupStatusMessage && (
+              <div className="p-3 bg-amber-500/20 border border-amber-400/50 rounded-2xl text-xs text-amber-200 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{backupStatusMessage}</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {/* Export Button */}
+              <button
+                type="button"
+                onClick={exportBackupJson}
+                className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-xs flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <Download className="w-4 h-4" />
+                <span>تنزيل نسخة احتياطية كاملة (JSON) 📥</span>
+              </button>
+
+              {/* Restore Button */}
+              <label className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-200 border border-amber-500/30 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all">
+                <UploadCloud className="w-4 h-4 text-amber-400" />
+                <span>{backupRestoreLoading ? 'جاري الاسترجاع...' : 'استرجاع قاعدة البيانات من ملف 📤'}</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  disabled={backupRestoreLoading}
+                  onChange={handleRestoreFileSelected}
+                />
+              </label>
+
+              {/* Force Server Sync */}
+              <button
+                type="button"
+                onClick={handleForceSync}
+                disabled={backupRestoreLoading}
+                className="px-4 py-2.5 rounded-xl bg-stone-800/80 hover:bg-stone-700 text-stone-300 border border-stone-700 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all"
+              >
+                <Save className="w-4 h-4 text-emerald-400" />
+                <span>تأكيد الحفظ والمزامنة السحابية 🔄</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Event 1 */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-50/60 to-purple-50/60 dark:from-stone-800 dark:to-stone-850 border border-amber-200/80 dark:border-stone-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black text-base text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                  🏆 حفلة ختام العام الدراسي وتوزيع الكؤوس
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold text-[10px]">
-                  الحدث الأكبر السنوي
-                </span>
+          {/* Events Management Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <PartyPopper className="w-5 h-5 text-purple-600" />
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                    أجندة الحفلات والتكريمات والمناسبات الكنسية
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  لوحة إدارة المناسبات والحفلات: أضف، عدل، واحذف مواعيد الاحتفالات والمؤتمرات براحتك مع تحديد الفئات المستهدفة.
+                </p>
               </div>
-              <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                يقام على مسرح الكنيسة الكبير بحضور آباء الكنيسة الأجلاء، ويتضمن عرض مسرحي لكرازة القديس بولس، وتوزيع كؤوس التفوق للأوائل، وشهادات تذكارية لكافة المشاركين.
-              </p>
-              <div className="flex items-center gap-2 text-[11px] text-stone-500 pt-2 border-t border-amber-200/40 dark:border-stone-700">
-                <span>📍 المكان: مسرح الكنيسة</span>
-                <span>•</span>
-                <span>🎁 تكريم الأوائل بالـ ٧ فصول</span>
-              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenAddEvent}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة مناسبة أو حفلة جديدة ✝️</span>
+              </button>
             </div>
 
-            {/* Event 2 */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-blue-50/60 to-indigo-50/60 dark:from-stone-800 dark:to-stone-850 border border-blue-200/80 dark:border-stone-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black text-base text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                  🎓 يوم تكريم المتفوقين وحاملي شهادات التقدير
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-200 font-bold text-[10px]">
-                  تكريم فصلي
-                </span>
+            {churchEvents.length === 0 ? (
+              <div className="p-12 text-center border-2 border-dashed border-stone-200 dark:border-stone-800 rounded-2xl space-y-3">
+                <PartyPopper className="w-12 h-12 text-purple-400 mx-auto" />
+                <h4 className="font-bold text-sm text-stone-700 dark:text-stone-300">
+                  لا توجد مناسبات أو حفلات مسجلة حالياً
+                </h4>
+                <p className="text-xs text-stone-500 dark:text-stone-400 max-w-sm mx-auto">
+                  اضغط على زر "إضافة مناسبة أو حفلة جديدة" أعلاه لإنشاء موعد احتفال، حفل ختام السنة، أو مؤتمر روحي.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenAddEvent}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  + إضافة أول مناسبة الآن
+                </button>
               </div>
-              <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                تكريم الطلاب الحاصلين على أعلى درجات أعمال السنة (٦٠) والامتحان النهائي (٤٠) بمجموع يفوق ٩٠٪، مع منحهم درع التفوق الدراسي.
-              </p>
-              <div className="flex items-center gap-2 text-[11px] text-stone-500 pt-2 border-t border-blue-200/40 dark:border-stone-700">
-                <span>🎖️ شهادات تقدير معتمدة</span>
-                <span>•</span>
-                <span>📸 التقاط صور تذكارية</span>
-              </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {churchEvents.map((evt) => {
+                  const typeLabel =
+                    evt.type === 'celebration'
+                      ? '🎉 حفلة'
+                      : evt.type === 'graduation'
+                      ? '🎓 حفل تخرج وتكريم'
+                      : evt.type === 'spiritual_day'
+                      ? '⛪ يوم روحي / مؤتمر'
+                      : evt.type === 'trip'
+                      ? '🚌 رحلة كنسية'
+                      : evt.type === 'competition'
+                      ? '🏆 مسابقة'
+                      : '✝️ مناسبة عامة';
 
-            {/* Event 3 */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50/60 to-teal-50/60 dark:from-stone-800 dark:to-stone-850 border border-emerald-200/80 dark:border-stone-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black text-base text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                  ⛪ المؤتمر الروحي السنوي لمدرسة الكتاب
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 font-bold text-[10px]">
-                  مؤتمر صيفي
-                </span>
-              </div>
-              <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                ٣ أيام روحية في بيت مارمينا للمؤتمرات، دراسة تفسيرية معمقة لرسائل القديس بولس، قداسات يومية، ومسابقات ثقافية ورياضية.
-              </p>
-              <div className="flex items-center gap-2 text-[11px] text-stone-500 pt-2 border-t border-emerald-200/40 dark:border-stone-700">
-                <span>🏕️ ٣ أيام مبيت</span>
-                <span>•</span>
-                <span>📖 دراسات لاهوتية وكتابية</span>
-              </div>
-            </div>
+                  const audienceLabel =
+                    evt.targetAudience === 'servants'
+                      ? 'للخدام فقط'
+                      : evt.targetAudience === 'students'
+                      ? 'للطلاب فقط'
+                      : 'للجميع (خدام وطلاب)';
 
-            {/* Event 4 */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-50/60 to-amber-50/60 dark:from-stone-800 dark:to-stone-850 border border-rose-200/80 dark:border-stone-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black text-base text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                  🌟 مسابقة الصوم الكبير الكبرى وأعياد القيامة
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-200 font-bold text-[10px]">
-                  مسابقة كنسية
-                </span>
+                  const statusColor =
+                    evt.status === 'ongoing'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      : evt.status === 'completed'
+                      ? 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+
+                  const statusLabel =
+                    evt.status === 'ongoing'
+                      ? 'جارية الآن'
+                      : evt.status === 'completed'
+                      ? 'مكتملة'
+                      : 'قادمة';
+
+                  return (
+                    <div
+                      key={evt.id}
+                      className="p-5 rounded-2xl bg-stone-50 dark:bg-stone-850/70 border border-stone-200 dark:border-stone-800 space-y-3 relative group"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-stone-900 dark:text-stone-100">
+                              {evt.title}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                              {typeLabel}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-stone-500 dark:text-stone-400 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                              <span>{evt.date}</span>
+                            </span>
+                            {evt.time && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                <span>{evt.time}</span>
+                              </span>
+                            )}
+                            {evt.location && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                                <span>{evt.location}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${statusColor}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {evt.description && (
+                        <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                          {evt.description}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 border-t border-stone-200/60 dark:border-stone-700/60 text-[11px]">
+                        <span className="text-stone-500 dark:text-stone-400">
+                          الفئة المستهدفة: <strong className="text-stone-700 dark:text-stone-200">{audienceLabel}</strong>
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditEvent(evt)}
+                            className="p-1.5 rounded-lg bg-white dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            title="تعديل المناسبة"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-amber-600" />
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEventToDelete(evt)}
+                            className="p-1.5 rounded-lg bg-white dark:bg-stone-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 border border-stone-200 dark:border-stone-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            title="حذف المناسبة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                أسئلة أسبوعية لكل مرحلة من مراحل المدرسة الـ ٧، مع رصد درجات إضافية للطلاب المشاركين وجوائز قيمة في أحد القيامة المجيد.
-              </p>
-              <div className="flex items-center gap-2 text-[11px] text-stone-500 pt-2 border-t border-rose-200/40 dark:border-stone-700">
-                <span>🎁 جوائز تشجيعية</span>
-                <span>•</span>
-                <span>📝 أسئلة لكل مرحلة</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1846,18 +2129,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              {/* Attachment Name */}
-              <div>
-                <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
-                  اسم ملف المرفق (اختياري):
+              {/* PDF & Document Attachment Upload (User Request 3) */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700">
+                <label className="block font-bold text-stone-800 dark:text-stone-200">
+                  إرفاق ملف مذكرة أو إعلان (PDF / Word):
                 </label>
-                <input
-                  type="text"
-                  placeholder="مثال: جدول_امتحانات_الفصل.pdf"
-                  value={newPostAttachment}
-                  onChange={(e) => setNewPostAttachment(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
-                />
+                
+                {newPostFileData ? (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-5 h-5 text-rose-600 shrink-0" />
+                      <div className="truncate text-right">
+                        <p className="font-bold text-amber-950 dark:text-amber-200 truncate">{newPostAttachment}</p>
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400">{newPostFileSize || 'ملف مرفق جاهز للتحميل'}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemovePdf}
+                      className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-600 cursor-pointer"
+                      title="إزالة الملف"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-stone-300 dark:border-stone-700 hover:border-amber-500 rounded-xl cursor-pointer bg-white dark:bg-stone-900 transition-colors">
+                    <UploadCloud className="w-6 h-6 text-amber-600 mb-1" />
+                    <span className="font-bold text-stone-700 dark:text-stone-300">
+                      اضغط هنا لرفع ملف PDF أو مذكرة 📄
+                    </span>
+                    <span className="text-[10px] text-stone-400 mt-0.5">
+                      يدعم صيغ PDF، Word، والمستندات (بحد أقصى 25 ميجابايت)
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf,.doc,.docx"
+                      onChange={handlePdfUpload}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
@@ -1877,6 +2189,221 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Add / Edit Church Event (User Request 2) */}
+      {eventModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
+              <div className="flex items-center gap-2">
+                <PartyPopper className="w-5 h-5 text-purple-600" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                  {editingEventId ? 'تعديل المناسبة أو الحفلة' : 'إضافة مناسبة أو حفلة جديدة ✝️'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEventModalOpen(false)}
+                className="w-7 h-7 rounded-full bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 flex items-center justify-center text-stone-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvent} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  عنوان الحفلة أو المناسبة: <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: حفلة ختام العام وتوزيع الكؤوس، أو المؤتمر الروحي السنوي"
+                  value={eventTitle}
+                  onChange={(e) => setEventTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                    نوع المناسبة:
+                  </label>
+                  <select
+                    value={eventType}
+                    onChange={(e) => setEventType(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-bold"
+                  >
+                    <option value="celebration">🎉 حفلة كبرى</option>
+                    <option value="graduation">🎓 حفل تكريم وتخرج</option>
+                    <option value="spiritual_day">⛪ مؤتمر أو يوم روحي</option>
+                    <option value="trip">🚌 رحلة كنسية</option>
+                    <option value="competition">🏆 مسابقة وتحدي</option>
+                    <option value="general">✝️ مناسبة عامة</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                    الحالة:
+                  </label>
+                  <select
+                    value={eventStatus}
+                    onChange={(e) => setEventStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-bold"
+                  >
+                    <option value="upcoming">قادمة ⏳</option>
+                    <option value="ongoing">جارية الآن 🟢</option>
+                    <option value="completed">مكتملة ومؤرشفة ✅</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                    تاريخ المناسبة: <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                    الوقت (اختياري):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: ٠٥:٠٠ مساءً"
+                    value={eventTime}
+                    onChange={(e) => setEventTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                  المكان (اختياري):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: مسرح الكنيسة الكبير، بيت مارمينا للمؤتمرات..."
+                  value={eventLocation}
+                  onChange={(e) => setEventLocation(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                    الفئة المستهدفة:
+                  </label>
+                  <select
+                    value={eventAudience}
+                    onChange={(e) => setEventAudience(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-bold"
+                  >
+                    <option value="all">للجميع (خدام ومخدومين)</option>
+                    <option value="students">للطلاب فقط</option>
+                    <option value="servants">للخدام فقط</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                    تخصيص فصل محدد (اختياري):
+                  </label>
+                  <select
+                    value={eventTargetClass}
+                    onChange={(e) => setEventTargetClass(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                  >
+                    <option value="all_classes">لكافة الفصول الـ ٧</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 dark:text-stone-300 mb-1">
+                  تفاصيل وبرنامج المناسبة:
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="اكتب برنامج الاحتفال، التكريمات، والفقرات المقررة..."
+                  value={eventDescription}
+                  onChange={(e) => setEventDescription(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEventModalOpen(false)}
+                  className="px-4 py-2 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingEventId ? 'حفظ التعديلات' : 'إضافة المناسبة الآن'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL: Delete Church Event */}
+      {eventToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h4 className="font-bold text-sm text-stone-900 dark:text-stone-100">
+                تأكيد حذف المناسبة
+              </h4>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                هل أنت متأكد من حذف مناسبة "{eventToDelete.title}" نهائياً من الأجندة؟
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEventToDelete(null)}
+                className="flex-1 py-2 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl font-bold text-xs cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteEvent}
+                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-xs cursor-pointer shadow-xs"
+              >
+                تأكيد الحذف 🗑️
+              </button>
+            </div>
           </div>
         </div>
       )}

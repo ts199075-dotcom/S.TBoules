@@ -5,6 +5,8 @@ import path from 'path';
 import { defineConfig, type Connect } from 'vite';
 import { createApiApp } from './server/app';
 
+import { VitePWA } from 'vite-plugin-pwa';
+
 function apiMiddleware(): Connect.NextHandleFunction {
   const api = createApiApp();
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
@@ -21,6 +23,46 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
+        manifest: {
+          id: '/',
+          name: 'مدرسة سانت بولس للكتاب المقدس',
+          short_name: 'سانت بولس',
+          description: 'المنصة التعليمية الشاملة لمدرسة سانت بولس للكتاب المقدس - كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي',
+          theme_color: '#78350f',
+          background_color: '#0f172a',
+          display: 'standalone',
+          orientation: 'portrait',
+          start_url: '/',
+          scope: '/',
+          lang: 'ar',
+          dir: 'rtl',
+          icons: [
+            {
+              src: '/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg',
+              sizes: '192x192',
+              type: 'image/jpeg',
+              purpose: 'any',
+            },
+            {
+              src: '/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg',
+              sizes: '512x512',
+              type: 'image/jpeg',
+              purpose: 'any',
+            },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,jpg,jpeg}'],
+          navigateFallback: '/index.html',
+        },
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
+      }),
       {
         name: 'st-paul-api',
         configureServer(server) {
