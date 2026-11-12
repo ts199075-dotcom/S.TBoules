@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   BookOpen,
@@ -51,7 +51,49 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [masterMenuOpen, setMasterMenuOpen] = useState(false);
-const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const notificationsRef = React.useRef<HTMLDivElement>(null);
+  const userMenuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close notifications immediately when clicking anywhere on the screen
+  useEffect(() => {
+    if (!showNotifications) return;
+    const handleOutside = (e: Event) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowNotifications(false);
+    };
+    document.addEventListener('pointerdown', handleOutside, true);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside, true);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showNotifications]);
+
+  // Close user menu immediately when clicking anywhere on the screen
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const handleOutside = (e: Event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowUserMenu(false);
+    };
+    document.addEventListener('pointerdown', handleOutside, true);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutside, true);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showUserMenu]);
+
   const navBtn = (active: boolean, extra = '') =>
     `px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
       active
@@ -215,7 +257,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
           </button>
 
           {/* Notifications Popover */}
-          <div className="relative shrink-0">
+          <div ref={notificationsRef} className="relative shrink-0">
             <button
               onClick={() => {
                 setShowNotifications(!showNotifications);
@@ -300,7 +342,7 @@ const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
           {/* Current User Menu & Direct Logout */}
           {currentUser ? (
             <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-              <div className="relative shrink-0">
+              <div ref={userMenuRef} className="relative shrink-0">
                 <button
                   onClick={() => {
                     setShowUserMenu(!showUserMenu);

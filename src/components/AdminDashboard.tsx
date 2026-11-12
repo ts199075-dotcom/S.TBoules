@@ -1716,72 +1716,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 8: الحفلات والمناسبات والتكريمات (ديناميكية بالكامل مع إمكانية الإضافة والتعديل والحذف) */}
       {activeTab === 'events' && (
         <div className="space-y-6">
-          {/* Database Backup & Disaster Recovery Section (User Request 5 & 9) */}
-          <div className="bg-gradient-to-r from-slate-900 via-stone-900 to-amber-950 rounded-3xl p-6 sm:p-7 text-white border border-amber-600/30 shadow-lg space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-800 pb-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Database className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-base sm:text-lg font-bold text-amber-100">
-                    حفظ النسخ الاحتياطية وحماية قاعدة البيانات الدائمة 💾
-                  </h3>
-                </div>
-                <p className="text-xs text-stone-300 leading-relaxed">
-                  يضمن هذا النظام عدم مسح أي بيانات أو طلاب حتى لو سجل 500+ طالب؛ مع إمكانية تنزيل نسخة احتياطية كاملة واسترجاعها بنقرة واحدة.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>المسجلون حالياً: {users.length} مستخدم</span>
-                </span>
-              </div>
-            </div>
-
-            {backupStatusMessage && (
-              <div className="p-3 bg-amber-500/20 border border-amber-400/50 rounded-2xl text-xs text-amber-200 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{backupStatusMessage}</span>
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              {/* Export Button */}
-              <button
-                type="button"
-                onClick={exportBackupJson}
-                className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-xs flex items-center gap-2 cursor-pointer transition-all"
-              >
-                <Download className="w-4 h-4" />
-                <span>تنزيل نسخة احتياطية كاملة (JSON) 📥</span>
-              </button>
-
-              {/* Restore Button */}
-              <label className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-200 border border-amber-500/30 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all">
-                <UploadCloud className="w-4 h-4 text-amber-400" />
-                <span>{backupRestoreLoading ? 'جاري الاسترجاع...' : 'استرجاع قاعدة البيانات من ملف 📤'}</span>
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  className="hidden"
-                  disabled={backupRestoreLoading}
-                  onChange={handleRestoreFileSelected}
-                />
-              </label>
-
-              {/* Force Server Sync */}
-              <button
-                type="button"
-                onClick={handleForceSync}
-                disabled={backupRestoreLoading}
-                className="px-4 py-2.5 rounded-xl bg-stone-800/80 hover:bg-stone-700 text-stone-300 border border-stone-700 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all"
-              >
-                <Save className="w-4 h-4 text-emerald-400" />
-                <span>تأكيد الحفظ والمزامنة السحابية 🔄</span>
-              </button>
-            </div>
-          </div>
 
           {/* Events Management Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
@@ -1955,8 +1889,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MODAL: Targeted Per-Class / Audience Post Publishing (Requested by User) */}
       {newPostModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          onClick={() => setNewPostModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
               <div className="flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-amber-600" />
@@ -2195,8 +2135,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MODAL: Add / Edit Church Event (User Request 2) */}
       {eventModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          onClick={() => setEventModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
               <div className="flex items-center gap-2">
                 <PartyPopper className="w-5 h-5 text-purple-600" />
@@ -2375,8 +2321,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* CONFIRMATION MODAL: Delete Church Event */}
       {eventToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          onClick={() => setEventToDelete(null)}
+        >
+          <div
+            className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -2410,8 +2362,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MODAL 1: Grading Modal for Session */}
       {gradingModalOpen && selectedStudentForGrading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right max-h-[92vh] flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          onClick={() => setGradingModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 p-5 text-white flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-base text-amber-50">
@@ -2709,8 +2667,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MODAL 2: Final Exam Score */}
       {finalExamModalOpen && studentForFinalExam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-right">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          onClick={() => setFinalExamModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
               درجة الامتحان النهائي: {studentForFinalExam.name}
             </h3>
@@ -2754,8 +2718,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MODAL 3: Create New Session */}
       {newSessionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-right">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+          onClick={() => setNewSessionModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
                 إضافة لقاء أسبوعي جديد لـ {currentClassObj.name}
@@ -2857,8 +2827,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* COMPREHENSIVE FEATURES GUIDE MODAL */}
       {featuresModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-4xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-5 sm:p-8 space-y-6 text-right max-h-[92vh] flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-950/80 backdrop-blur-xs overflow-y-auto"
+          onClick={() => setFeaturesModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-stone-200 dark:border-stone-800 p-5 sm:p-8 space-y-6 text-right max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4 shrink-0">
               <div className="space-y-1">
@@ -3029,10 +3005,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const rank = leaderboard.findIndex((item) => item.studentId === student.id) + 1;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fade-in text-right">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fade-in text-right"
+            onClick={() => setSelectedStudentForProfile(null)}
+          >
             <div
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden"
               dir="rtl"
+              onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
               <div className="bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 text-white p-5 sm:p-6 flex items-center justify-between gap-4 border-b border-amber-900/40 shrink-0">
@@ -3276,8 +3256,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Confirmation Modal for Session Deletion */}
       {sessionToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+          dir="rtl"
+          onClick={() => setSessionToDelete(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 text-rose-600">
               <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center">
                 <Trash2 className="w-5 h-5" />

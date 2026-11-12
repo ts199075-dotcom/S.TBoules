@@ -67,13 +67,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-stone-900/60 via-stone-900/75 to-stone-900/90 pointer-events-none" />
 
         <div className="max-w-4xl mx-auto relative z-10 text-center space-y-6">
-          {/* Saint Paul Icon Avatar Display */}
+          {/* Saint Paul Icon Avatar Display with Smooth In-Place Hover Zoom (No click modal) */}
           <div className="flex justify-center">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-600/60 shadow-md overflow-hidden bg-stone-800 p-0.5">
+            <div
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-600/70 shadow-lg overflow-hidden bg-stone-800 p-0.5 transition-transform duration-300 ease-out hover:scale-115 cursor-pointer"
+              title="القديس بولس الرسول"
+            >
               <img
                 src="/assets/aistudio/IMG-20261019-WA0054_c30c6539.jpg"
                 alt="القديس بولس الرسول"
-                className="w-full h-full object-cover rounded-full"
+                className="w-full h-full object-cover rounded-full transition-transform duration-300 ease-out hover:scale-110"
               />
             </div>
           </div>
@@ -84,17 +87,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <span>كنيسة رئيس الملائكة ميخائيل والأمير تادرس الشطبي</span>
           </div>
 
-          {/* Main Title */}
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-amber-50">
-            مدرسة سانت بولس للكتاب المقدس
+          {/* Main Title - Requested by user to be Saint Paul's School */}
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-amber-50 font-serif">
+            Saint Paul's School
           </h1>
 
-          {/* User Requested Body Introduction */}
-          <div className="space-y-2 max-w-2xl mx-auto">
-            <p className="text-base sm:text-lg text-stone-200 font-medium leading-relaxed">
-              أهلاً بك في مدرسة سانت بولس للكتاب المقدس
-            </p>
-            <p className="text-xs sm:text-sm text-stone-300/90 leading-relaxed">
+          {/* User Requested: Put the Biblical Verse at the top instead of 'Welcome to Saint Paul' */}
+          <div className="space-y-3 max-w-2xl mx-auto">
+            <div className="bg-stone-800/80 border border-amber-600/40 rounded-2xl p-4 sm:p-5 shadow-inner">
+              <p className="text-sm sm:text-base text-amber-200 font-serif italic leading-relaxed">
+                «كُلُّ الْكِتَابِ هُوَ مُوحىً بِهِ مِنَ اللهِ، وَنَافِعٌ لِلتَّعْلِيمِ وَالتَّوْبِيخِ، لِلتَّقْوِيمِ وَالتَّأْدِيبِ الَّذِي فِي الْبِرِّ»
+              </p>
+              <span className="text-[11px] sm:text-xs text-stone-300 font-sans font-semibold block mt-1.5 text-amber-400">
+                (رسالة القديس بولس الرسول الثانية إلى تيموثاوس ٣ : ١٦)
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-stone-300/90 leading-relaxed pt-1">
               وهنا ستتعلم معنا الكتاب المقدس بطريقة رائعة من خلال عدة محاور وهي:
             </p>
           </div>
@@ -212,17 +220,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* Biblical Verse Banner */}
-      <section className="max-w-3xl mx-auto px-4 text-center">
-        <div className="bg-stone-100 dark:bg-stone-900/80 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl space-y-1">
-          <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 font-serif italic">
-            «كُلُّ الْكِتَابِ هُوَ مُوحىً بِهِ مِنَ اللهِ، وَنَافِعٌ لِلتَّعْلِيمِ وَالتَّوْبِيخِ، لِلتَّقْوِيمِ وَالتَّأْدِيبِ الَّذِي فِي الْبِرِّ»
-          </p>
-          <span className="text-[11px] text-stone-500 dark:text-stone-400 font-sans block">
-            (رسالة القديس بولس الرسول الثانية إلى تيموثاوس ٣ : ١٦)
-          </span>
-        </div>
-      </section>
     </div>
   );
 };

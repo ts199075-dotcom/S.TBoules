@@ -220,201 +220,51 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCurrentUserId('');
     }
 
-    // Smart merge users to prevent data wipe when server restarts
     if (Array.isArray(state.users)) {
-      setUsers((prevLocalUsers) => {
-        const userMap = new Map<string, UserProfile>();
-        for (const u of state.users) {
-          if (u && u.id) userMap.set(u.id, u);
-        }
-        const missingOnServer: UserProfile[] = [];
-        for (const lu of prevLocalUsers) {
-          if (lu && lu.id && !userMap.has(lu.id)) {
-            userMap.set(lu.id, lu);
-            missingOnServer.push(lu);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ users: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(userMap.values());
-      });
+      setUsers(state.users);
     }
-
     if (Array.isArray(state.academicTerms) && state.academicTerms.length > 0) {
       setAcademicTerms(state.academicTerms);
     }
     if (state.classAssignedBooks && typeof state.classAssignedBooks === 'object') {
       setClassAssignedBooks(state.classAssignedBooks);
     }
-
-    // Merge sessions
     if (Array.isArray(state.sessions)) {
-      setSessions((prevLocalSessions) => {
-        const sMap = new Map<string, BibleSession>();
-        for (const s of state.sessions) {
-          if (s && s.id) sMap.set(s.id, s);
-        }
-        const missingOnServer: BibleSession[] = [];
-        for (const ls of prevLocalSessions) {
-          if (ls && ls.id && !sMap.has(ls.id)) {
-            sMap.set(ls.id, ls);
-            missingOnServer.push(ls);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ sessions: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(sMap.values());
-      });
+      setSessions(state.sessions);
     }
-
-    // Merge grades
     if (Array.isArray(state.grades)) {
-      setGrades((prevLocalGrades) => {
-        const gradeMap = new Map<string, SessionGrade>();
-        for (const g of state.grades) {
-          if (g && g.sessionId && g.studentId) {
-            gradeMap.set(`${g.sessionId}_${g.studentId}`, g);
-          }
-        }
-        const missingOnServer: SessionGrade[] = [];
-        for (const lg of prevLocalGrades) {
-          const key = `${lg.sessionId}_${lg.studentId}`;
-          if (!gradeMap.has(key)) {
-            gradeMap.set(key, lg);
-            missingOnServer.push(lg);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ grades: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(gradeMap.values());
-      });
+      setGrades(state.grades);
     }
-
     if (state.finalExamScores && typeof state.finalExamScores === 'object') {
-      setFinalExamScores((prev) => ({ ...prev, ...state.finalExamScores }));
+      setFinalExamScores(state.finalExamScores);
     }
-
-    // Merge servantSubmissions
     if (Array.isArray(state.servantSubmissions)) {
-      setServantSubmissions((prevSubs) => {
-        const subMap = new Map<string, ServantAttendanceSubmission>();
-        for (const s of state.servantSubmissions) {
-          if (s && s.id) subMap.set(s.id, s);
-        }
-        const missingOnServer: ServantAttendanceSubmission[] = [];
-        for (const ls of prevSubs) {
-          if (ls && ls.id && !subMap.has(ls.id)) {
-            subMap.set(ls.id, ls);
-            missingOnServer.push(ls);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ servantSubmissions: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(subMap.values());
-      });
+      setServantSubmissions(state.servantSubmissions);
     }
-
-    if (Array.isArray(state.notifications)) setNotifications(state.notifications);
-
-    // Merge lessonPosts
+    if (Array.isArray(state.notifications)) {
+      setNotifications(state.notifications);
+    }
     if (Array.isArray(state.lessonPosts)) {
-      setLessonPosts((prevPosts) => {
-        const pMap = new Map<string, ServantLessonPost>();
-        for (const p of state.lessonPosts) {
-          if (p && p.id) pMap.set(p.id, p);
-        }
-        const missingOnServer: ServantLessonPost[] = [];
-        for (const lp of prevPosts) {
-          if (lp && lp.id && !pMap.has(lp.id)) {
-            pMap.set(lp.id, lp);
-            missingOnServer.push(lp);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ lessonPosts: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(pMap.values());
-      });
+      setLessonPosts(state.lessonPosts);
     }
-
-    // Merge libraryBooks
     if (Array.isArray(state.libraryBooks)) {
-      setLibraryBooks((prevBooks) => {
-        const bMap = new Map<string, LibraryBook>();
-        for (const b of state.libraryBooks) {
-          if (b && b.id) bMap.set(b.id, b);
-        }
-        const missingOnServer: LibraryBook[] = [];
-        for (const lb of prevBooks) {
-          if (lb && lb.id && !bMap.has(lb.id)) {
-            bMap.set(lb.id, lb);
-            missingOnServer.push(lb);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ libraryBooks: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(bMap.values());
-      });
+      setLibraryBooks(state.libraryBooks);
     }
-
-    // Merge churchEvents
     if (Array.isArray(state.churchEvents)) {
-      setChurchEvents((prevLocalEvents) => {
-        const evtMap = new Map<string, ChurchEvent>();
-        for (const e of state.churchEvents) {
-          if (e && e.id) evtMap.set(e.id, e);
-        }
-        const missingOnServer: ChurchEvent[] = [];
-        for (const le of prevLocalEvents) {
-          if (le && le.id && !evtMap.has(le.id)) {
-            evtMap.set(le.id, le);
-            missingOnServer.push(le);
-          }
-        }
-        if (missingOnServer.length > 0) {
-          void apiRequest('/api/sync/push', {
-            method: 'POST',
-            body: JSON.stringify({ churchEvents: missingOnServer }),
-          }).catch(() => undefined);
-        }
-        return Array.from(evtMap.values());
-      });
+      setChurchEvents(state.churchEvents);
     }
-
     if (state.yearWorkApprovedClasses && typeof state.yearWorkApprovedClasses === 'object') {
-      setYearWorkApprovedClasses((prev) => ({ ...prev, ...state.yearWorkApprovedClasses }));
+      setYearWorkApprovedClasses(state.yearWorkApprovedClasses);
     }
   }, []);
 
-  // Periodic Polling: checks server every 3 seconds so ANY device update reflects immediately on all other devices!
+  // Periodic Polling: checks server every 6 seconds, pauses when tab is hidden for maximum battery & speed
   useEffect(() => {
     let cancelled = false;
     let timer: any = null;
 
     const syncState = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       try {
         const ok = await apiHealth();
         if (cancelled) return;
@@ -429,7 +279,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     void syncState();
-    timer = setInterval(syncState, 3000);
+    timer = setInterval(syncState, 6000);
 
     return () => {
       cancelled = true;
