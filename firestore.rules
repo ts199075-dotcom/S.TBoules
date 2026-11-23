@@ -1,0 +1,888 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // GLOBAL HARDENED PRIMITIVE HELPERS
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && uid is string && request.auth.uid == uid;
+    }
+
+    function isVerifiedBootstrapAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'ts199075@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerifiedBootstrapAdmin() ||
+        (isEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasActiveUserDoc() {
+      return isEmailVerified() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userDoc().status == 'active';
+    }
+
+    function isActiveMember() {
+      return isAdmin() || hasActiveUserDoc();
+    }
+
+    function isValidClassId(c) {
+      return c is string && c in ['primary_4', 'primary_5', 'primary_6', 'prep_1', 'prep_2_3', 'secondary', 'adults'];
+    }
+
+    function isServantForClass(cid) {
+      return isAdmin() || (
+        hasActiveUserDoc() &&
+        isValidClassId(cid) &&
+        (
+          userDoc().role == 'assistant' ||
+          (userDoc().role == 'servant' && userDoc().classId == cid)
+        )
+      );
+    }
+
+    function isActiveServantOrAssistant() {
+      return isAdmin() || (
+        hasActiveUserDoc() &&
+        userDoc().role in ['servant', 'assistant']
+      );
+    }
+
+    function isValidRole(r) {
+      return r is string && r in ['admin', 'assistant', 'servant', 'student'];
+    }
+
+    function isValidRequestedRole(r) {
+      return r is string && r in ['student', 'servant'];
+    }
+
+    function isValidUserStatus(s) {
+      return s is string && s in ['active', 'pending', 'rejected', 'suspended'];
+    }
+
+    function isValidServerTimestampsOnCreate(data) {
+      return data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        data.serverCreatedAt == request.time &&
+        data.serverUpdatedAt == request.time;
+    }
+
+    function isValidServerTimestampOnUpdate(inData, exData) {
+      return inData.serverCreatedAt == exData.serverCreatedAt &&
+        inData.serverUpdatedAt is timestamp &&
+        inData.serverUpdatedAt == request.time;
+    }
+
+    function sessionDoc(sid) {
+      return get(/databases/$(database)/documents/sessions/$(sid)).data;
+    }
+
+    function qrSecretDoc(sid) {
+      return get(/databases/$(database)/documents/session_qr_secrets/$(sid)).data;
+    }
+
+    function isValidStudentQrCheckin(sid, submittedCode, cid) {
+      return exists(/databases/$(database)/documents/session_qr_secrets/$(sid)) &&
+        qrSecretDoc(sid).qrActive == true &&
+        qrSecretDoc(sid).classId == cid &&
+        qrSecretDoc(sid).expiresAtMs is number &&
+        qrSecretDoc(sid).expiresAtMs > request.time.toMillis() &&
+        submittedCode is string &&
+        submittedCode.size() >= 4 &&
+        submittedCode.size() <= 128 &&
+        submittedCode == qrSecretDoc(sid).qrSecretCode;
+    }
+
+    // =========================================================================
+    // ENTITY VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    // =========================================================================
+
+    function isValidUserPrivate(data) {
+      return data.keys().hasAll(['id', 'uid', 'name', 'phone', 'age', 'role', 'status', 'registeredAt', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'uid', 'name', 'email', 'phone', 'age', 'role', 'requestedRole', 'status', 'classId', 'guardianPhone', 'confessionFather', 'address', 'avatar', 'registeredAt', 'notes', 'mergedIntoUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.uid) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        data.phone is string && data.phone.size() >= 4 && data.phone.size() <= 30 &&
+        data.age is number && data.age >= 5 && data.age <= 120 &&
+        isValidRole(data.role) &&
+        isValidUserStatus(data.status) &&
+        data.registeredAt is string && data.registeredAt.size() >= 1 && data.registeredAt.size() <= 40 &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('requestedRole' in data) || isValidRequestedRole(data.requestedRole)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+        (!('classId' in data) || isValidClassId(data.classId)) &&
+        (!('guardianPhone' in data) || (data.guardianPhone is string && data.guardianPhone.size() <= 30)) &&
+        (!('confessionFather' in data) || (data.confessionFather is string && data.confessionFather.size() <= 150)) &&
+        (!('address' in data) || (data.address is string && data.address.size() <= 300)) &&
+        (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 500)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+        (!('mergedIntoUid' in data) || isValidId(data.mergedIntoUid));
+    }
+
+    function isValidUserPublicProfile(data) {
+      return data.keys().hasAll(['id', 'uid', 'name', 'role', 'status', 'age', 'registeredAt', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'uid', 'name', 'role', 'status', 'classId', 'age', 'registeredAt', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.uid) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        isValidRole(data.role) &&
+        isValidUserStatus(data.status) &&
+        data.age is number && data.age >= 5 && data.age <= 120 &&
+        data.registeredAt is string && data.registeredAt.size() >= 1 && data.registeredAt.size() <= 40 &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('classId' in data) || isValidClassId(data.classId));
+    }
+
+    function isValidAdminMarker(data) {
+      return data.keys().hasAll(['uid', 'email', 'serverCreatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'serverCreatedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 200 &&
+        data.serverCreatedAt is timestamp;
+    }
+
+    function isValidAcademicTerm(data) {
+      return data.keys().hasAll(['id', 'title', 'bookSubject', 'sessionsCount', 'isCurrent', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'bookSubject', 'description', 'sessionsCount', 'isCurrent', 'startDate', 'endDate', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+        data.bookSubject is string && data.bookSubject.size() >= 1 && data.bookSubject.size() <= 200 &&
+        data.sessionsCount is number && data.sessionsCount >= 1 && data.sessionsCount <= 52 &&
+        data.isCurrent is bool &&
+        isValidId(data.createdByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+        (!('startDate' in data) || (data.startDate is string && data.startDate.size() <= 40)) &&
+        (!('endDate' in data) || (data.endDate is string && data.endDate.size() <= 40));
+    }
+
+    function isValidClassAssignedBook(data) {
+      return data.keys().hasAll(['id', 'classId', 'bookId', 'bookName', 'testament', 'termId', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'classId', 'bookId', 'bookName', 'testament', 'termId', 'assignedByServantName', 'assignedAt', 'targetSessionsCount', 'notes', 'customOverview', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        isValidClassId(data.classId) &&
+        data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+        data.bookName is string && data.bookName.size() >= 1 && data.bookName.size() <= 150 &&
+        data.testament is string && data.testament in ['old', 'new'] &&
+        data.termId is string && data.termId.size() >= 1 && data.termId.size() <= 128 &&
+        isValidId(data.updatedByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('assignedByServantName' in data) || (data.assignedByServantName is string && data.assignedByServantName.size() <= 150)) &&
+        (!('assignedAt' in data) || (data.assignedAt is string && data.assignedAt.size() <= 40)) &&
+        (!('targetSessionsCount' in data) || (data.targetSessionsCount is number && data.targetSessionsCount >= 1 && data.targetSessionsCount <= 52)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+        (!('customOverview' in data) || (data.customOverview is string && data.customOverview.size() <= 3000));
+    }
+
+    function isValidBibleSession(data) {
+      return data.keys().hasAll(['id', 'title', 'classId', 'date', 'servantName', 'maxScorePerMetric', 'qrActive', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'classId', 'termId', 'date', 'biblePassage', 'servantName', 'maxScorePerMetric', 'qrSecretCode', 'qrActive', 'expiresAtMs', 'sessionNumber', 'bookId', 'bookName', 'testament', 'coveredChapters', 'objective', 'memoryVerse', 'memoryVerseRef', 'memoryVerses', 'lessonSummary', 'attachmentName', 'fileData', 'fileType', 'fileSize', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        isValidClassId(data.classId) &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 40 &&
+        data.servantName is string && data.servantName.size() >= 1 && data.servantName.size() <= 150 &&
+        data.maxScorePerMetric is number && data.maxScorePerMetric >= 1 && data.maxScorePerMetric <= 100 &&
+        data.qrActive is bool &&
+        isValidId(data.createdByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('qrSecretCode' in data) || (data.qrSecretCode is string && data.qrSecretCode.size() >= 1 && data.qrSecretCode.size() <= 128)) &&
+        (!('expiresAtMs' in data) || (data.expiresAtMs is number && data.expiresAtMs > 0)) &&
+        (!('termId' in data) || (data.termId is string && data.termId.size() <= 128)) &&
+        (!('biblePassage' in data) || (data.biblePassage is string && data.biblePassage.size() <= 300)) &&
+        (!('sessionNumber' in data) || (data.sessionNumber is number && data.sessionNumber >= 1 && data.sessionNumber <= 52)) &&
+        (!('bookId' in data) || (data.bookId is string && data.bookId.size() <= 128)) &&
+        (!('bookName' in data) || (data.bookName is string && data.bookName.size() <= 150)) &&
+        (!('testament' in data) || (data.testament is string && data.testament in ['old', 'new'])) &&
+        (!('coveredChapters' in data) || (data.coveredChapters is string && data.coveredChapters.size() <= 200)) &&
+        (!('objective' in data) || (data.objective is string && data.objective.size() <= 1000)) &&
+        (!('memoryVerse' in data) || (data.memoryVerse is string && data.memoryVerse.size() <= 1000)) &&
+        (!('memoryVerseRef' in data) || (data.memoryVerseRef is string && data.memoryVerseRef.size() <= 200)) &&
+        (!('memoryVerses' in data) || (data.memoryVerses is list && data.memoryVerses.size() <= 30 && (
+          data.memoryVerses.size() == 0 || (
+            data.memoryVerses[0] is map &&
+            data.memoryVerses[0].keys().hasAll(['id', 'verse', 'reference']) &&
+            data.memoryVerses[0].keys().hasOnly(['id', 'verse', 'reference']) &&
+            data.memoryVerses[0].id is string && data.memoryVerses[0].id.size() <= 128 &&
+            data.memoryVerses[0].verse is string && data.memoryVerses[0].verse.size() <= 1000 &&
+            data.memoryVerses[0].reference is string && data.memoryVerses[0].reference.size() <= 200
+          )
+        ))) &&
+        (!('lessonSummary' in data) || (data.lessonSummary is string && data.lessonSummary.size() <= 5000)) &&
+        (!('attachmentName' in data) || (data.attachmentName is string && data.attachmentName.size() <= 255)) &&
+        (!('fileData' in data) || (data.fileData is string && data.fileData.size() <= 750000)) &&
+        (!('fileType' in data) || (data.fileType is string && data.fileType.size() <= 100)) &&
+        (!('fileSize' in data) || (data.fileSize is string && data.fileSize.size() <= 40));
+    }
+
+    function isValidSessionQrSecret(data) {
+      return data.keys().hasAll(['sessionId', 'classId', 'qrSecretCode', 'qrActive', 'expiresAtMs', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['sessionId', 'classId', 'qrSecretCode', 'qrActive', 'expiresAtMs', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.sessionId) &&
+        isValidClassId(data.classId) &&
+        data.qrSecretCode is string && data.qrSecretCode.size() >= 4 && data.qrSecretCode.size() <= 128 &&
+        data.qrActive is bool &&
+        data.expiresAtMs is number && data.expiresAtMs > 0 &&
+        isValidId(data.updatedByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp;
+    }
+
+    function isValidSessionGrade(data) {
+      return data.keys().hasAll(['id', 'sessionId', 'sessionTitle', 'date', 'studentId', 'exam', 'homework', 'attendance', 'participation', 'prayer', 'tools', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'sessionId', 'sessionTitle', 'date', 'studentId', 'classId', 'termId', 'exam', 'homework', 'attendance', 'participation', 'prayer', 'tools', 'notes', 'qrAttendedAt', 'submittedQrCode', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.sessionId) &&
+        data.sessionTitle is string && data.sessionTitle.size() >= 1 && data.sessionTitle.size() <= 200 &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 40 &&
+        isValidId(data.studentId) &&
+        data.exam is number && data.exam >= 0 && data.exam <= 10 &&
+        data.homework is number && data.homework >= 0 && data.homework <= 10 &&
+        data.attendance is number && data.attendance >= 0 && data.attendance <= 1 &&
+        data.participation is number && data.participation >= 0 && data.participation <= 1 &&
+        data.prayer is number && data.prayer >= 0 && data.prayer <= 1 &&
+        data.tools is number && data.tools >= 0 && data.tools <= 1 &&
+        isValidId(data.updatedByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('classId' in data) || isValidClassId(data.classId)) &&
+        (!('termId' in data) || (data.termId is string && data.termId.size() <= 128)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+        (!('qrAttendedAt' in data) || (data.qrAttendedAt is string && data.qrAttendedAt.size() <= 60)) &&
+        (!('submittedQrCode' in data) || (data.submittedQrCode is string && data.submittedQrCode.size() <= 128));
+    }
+
+    function isValidFinalExamScore(data) {
+      return data.keys().hasAll(['studentId', 'score', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['studentId', 'classId', 'score', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.studentId) &&
+        data.score is number && data.score >= 0 && data.score <= 40 &&
+        isValidId(data.updatedByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('classId' in data) || isValidClassId(data.classId));
+    }
+
+    function isValidServantSubmission(data) {
+      return data.keys().hasAll(['id', 'servantId', 'createdByUid', 'servantName', 'meetingDate', 'meetingTitle', 'status', 'submittedAt', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'servantId', 'createdByUid', 'servantName', 'servantPhone', 'meetingDate', 'meetingTitle', 'status', 'absenceReason', 'prepTitle', 'prepBibleVerse', 'prepAttachmentName', 'prepAttachmentType', 'prepAttachmentData', 'prepNotes', 'classId', 'submittedAt', 'viewedByAdmin', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.servantId) &&
+        isValidId(data.createdByUid) &&
+        data.servantName is string && data.servantName.size() >= 1 && data.servantName.size() <= 150 &&
+        data.meetingDate is string && data.meetingDate.size() >= 1 && data.meetingDate.size() <= 40 &&
+        data.meetingTitle is string && data.meetingTitle.size() >= 1 && data.meetingTitle.size() <= 200 &&
+        data.status is string && data.status in ['attending', 'absent'] &&
+        data.submittedAt is string && data.submittedAt.size() >= 1 && data.submittedAt.size() <= 60 &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('servantPhone' in data) || (data.servantPhone is string && data.servantPhone.size() <= 30)) &&
+        (!('absenceReason' in data) || (data.absenceReason is string && data.absenceReason.size() <= 1000)) &&
+        (!('prepTitle' in data) || (data.prepTitle is string && data.prepTitle.size() <= 200)) &&
+        (!('prepBibleVerse' in data) || (data.prepBibleVerse is string && data.prepBibleVerse.size() <= 300)) &&
+        (!('prepAttachmentName' in data) || (data.prepAttachmentName is string && data.prepAttachmentName.size() <= 255)) &&
+        (!('prepAttachmentType' in data) || (data.prepAttachmentType is string && data.prepAttachmentType in ['document', 'pdf', 'notes', 'image'])) &&
+        (!('prepAttachmentData' in data) || (data.prepAttachmentData is string && data.prepAttachmentData.size() <= 750000)) &&
+        (!('prepNotes' in data) || (data.prepNotes is string && data.prepNotes.size() <= 3000)) &&
+        (!('classId' in data) || isValidClassId(data.classId)) &&
+        (!('viewedByAdmin' in data) || data.viewedByAdmin is bool);
+    }
+
+    function isValidLessonPost(data) {
+      return data.keys().hasAll(['id', 'servantId', 'createdByUid', 'servantName', 'classId', 'title', 'category', 'content', 'createdAt', 'status', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'servantId', 'createdByUid', 'servantName', 'classId', 'title', 'category', 'bibleVerse', 'content', 'attachmentName', 'attachmentUrl', 'fileData', 'fileType', 'createdAt', 'status', 'rejectionReason', 'approvedBy', 'approvedAt', 'targetAudience', 'targetScope', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.servantId) &&
+        isValidId(data.createdByUid) &&
+        data.servantName is string && data.servantName.size() >= 1 && data.servantName.size() <= 150 &&
+        isValidClassId(data.classId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.category is string && data.category in ['lesson_handout', 'bible_study', 'quiz', 'announcement'] &&
+        data.content is string && data.content.size() >= 1 && data.content.size() <= 8000 &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 60 &&
+        data.status is string && data.status in ['pending_approval', 'approved', 'rejected'] &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('bibleVerse' in data) || (data.bibleVerse is string && data.bibleVerse.size() <= 1000)) &&
+        (!('attachmentName' in data) || (data.attachmentName is string && data.attachmentName.size() <= 255)) &&
+        (!('attachmentUrl' in data) || (data.attachmentUrl is string && data.attachmentUrl.size() <= 1000)) &&
+        (!('fileData' in data) || (data.fileData is string && data.fileData.size() <= 750000)) &&
+        (!('fileType' in data) || (data.fileType is string && data.fileType.size() <= 100)) &&
+        (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() <= 1000)) &&
+        (!('approvedBy' in data) || (data.approvedBy is string && data.approvedBy.size() <= 150)) &&
+        (!('approvedAt' in data) || (data.approvedAt is string && data.approvedAt.size() <= 60)) &&
+        (!('targetAudience' in data) || (data.targetAudience is string && data.targetAudience in ['all', 'servants_only', 'students'])) &&
+        (!('targetScope' in data) || (data.targetScope is string && data.targetScope in ['all_classes', 'specific_class']));
+    }
+
+    function isValidLibraryBook(data) {
+      return data.keys().hasAll(['id', 'title', 'author', 'category', 'description', 'addedBy', 'addedAt', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'author', 'category', 'description', 'targetClassId', 'downloadUrl', 'fileName', 'fileData', 'fileType', 'fileSize', 'pageCount', 'addedBy', 'addedAt', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+        data.author is string && data.author.size() >= 1 && data.author.size() <= 150 &&
+        data.category is string && data.category in ['old_testament', 'new_testament', 'patristic', 'theology_creed', 'servant_prep', 'church_ritual'] &&
+        data.description is string && data.description.size() <= 3000 &&
+        data.addedBy is string && data.addedBy.size() >= 1 && data.addedBy.size() <= 150 &&
+        data.addedAt is string && data.addedAt.size() >= 1 && data.addedAt.size() <= 60 &&
+        isValidId(data.createdByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('targetClassId' in data) || (data.targetClassId is string && data.targetClassId.size() <= 64)) &&
+        (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 1000)) &&
+        (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 255)) &&
+        (!('fileData' in data) || (data.fileData is string && data.fileData.size() <= 750000)) &&
+        (!('fileType' in data) || (data.fileType is string && data.fileType.size() <= 100)) &&
+        (!('fileSize' in data) || (data.fileSize is string && data.fileSize.size() <= 40)) &&
+        (!('pageCount' in data) || (data.pageCount is number && data.pageCount >= 1 && data.pageCount <= 10000));
+    }
+
+    function isValidChurchEvent(data) {
+      return data.keys().hasAll(['id', 'title', 'date', 'description', 'type', 'targetAudience', 'status', 'createdAt', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'date', 'time', 'location', 'description', 'type', 'targetAudience', 'targetClassId', 'status', 'createdBy', 'createdByUid', 'createdAt', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 40 &&
+        data.description is string && data.description.size() <= 3000 &&
+        data.type is string && data.type in ['celebration', 'graduation', 'spiritual_day', 'trip', 'meeting', 'competition', 'general'] &&
+        data.targetAudience is string && data.targetAudience in ['all', 'students', 'servants'] &&
+        data.status is string && data.status in ['upcoming', 'ongoing', 'completed'] &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 60 &&
+        isValidId(data.createdByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('time' in data) || (data.time is string && data.time.size() <= 40)) &&
+        (!('location' in data) || (data.location is string && data.location.size() <= 250)) &&
+        (!('targetClassId' in data) || (data.targetClassId is string && data.targetClassId.size() <= 64)) &&
+        (!('createdBy' in data) || (data.createdBy is string && data.createdBy.size() <= 150));
+    }
+
+    function isValidYearWorkLock(data) {
+      return data.keys().hasAll(['classId', 'locked', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['classId', 'locked', 'updatedByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidClassId(data.classId) &&
+        data.locked is bool &&
+        isValidId(data.updatedByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'title', 'message', 'timestamp', 'type', 'read', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['id', 'title', 'message', 'timestamp', 'type', 'read', 'actionUrl', 'audienceUserId', 'audienceRoles', 'createdByUid', 'serverCreatedAt', 'serverUpdatedAt']) &&
+        isValidId(data.id) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 1000 &&
+        data.timestamp is string && data.timestamp.size() >= 1 && data.timestamp.size() <= 60 &&
+        data.type is string && data.type in ['prep_upload', 'absence', 'new_student', 'grade_updated', 'role_assigned', 'qr_attendance', 'post_pending', 'post_approved'] &&
+        data.read is bool &&
+        isValidId(data.createdByUid) &&
+        data.serverCreatedAt is timestamp &&
+        data.serverUpdatedAt is timestamp &&
+        (!('actionUrl' in data) || (data.actionUrl is string && data.actionUrl.size() <= 200)) &&
+        (!('audienceUserId' in data) || (data.audienceUserId is string && data.audienceUserId.size() <= 128)) &&
+        (!('audienceRoles' in data) || (data.audienceRoles is list && data.audienceRoles.size() <= 4 && (
+          data.audienceRoles.size() == 0 || (data.audienceRoles[0] is string && data.audienceRoles[0].size() <= 30)
+        )));
+    }
+
+    // =========================================================================
+    // COLLECTION MATCH BLOCKS (Exhaustive Blueprint Coverage)
+    // =========================================================================
+
+    // Startup connection check (/test/connection)
+    match /test/{docId} {
+      allow get: if isValidId(docId) && docId == 'connection';
+      allow list, create, update, delete: if false;
+    }
+
+    // Admin authoritative markers
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isEmailVerified() && (isVerifiedBootstrapAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if isValidId(userId) &&
+        isAdmin() &&
+        isValidAdminMarker(incoming()) &&
+        incoming().uid == userId &&
+        incoming().serverCreatedAt == request.time;
+      allow update: if isValidId(userId) &&
+        isAdmin() &&
+        isValidAdminMarker(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().serverCreatedAt == existing().serverCreatedAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email']);
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // Private PII user records (/users/{userId})
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isEmailVerified() && resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(userId) &&
+        isEmailVerified() &&
+        isValidUserPrivate(incoming()) &&
+        isValidServerTimestampsOnCreate(incoming()) && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().uid == request.auth.uid &&
+            incoming().id == userId &&
+            incoming().role == 'student' &&
+            incoming().status == 'pending' &&
+            !('mergedIntoUid' in incoming())
+          )
+        );
+
+      allow update: if isValidId(userId) &&
+        isEmailVerified() &&
+        isValidUserPrivate(incoming()) &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().id == existing().id &&
+        incoming().uid == existing().uid &&
+        incoming().registeredAt == existing().registeredAt && (
+          isAdmin() || (
+            isOwner(userId) &&
+            existing().status != 'rejected' &&
+            existing().status != 'suspended' &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'guardianPhone', 'confessionFather', 'address', 'avatar', 'age', 'requestedRole', 'serverUpdatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // Non-PII directory profiles (/public_profiles/{userId})
+    match /public_profiles/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (isOwner(userId) || isActiveMember());
+      allow list: if isActiveMember() && (isAdmin() || resource.data.status == 'active' || resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(userId) &&
+        isEmailVerified() &&
+        isValidUserPublicProfile(incoming()) &&
+        isValidServerTimestampsOnCreate(incoming()) && (
+          isAdmin() || (
+            isOwner(userId) &&
+            incoming().uid == request.auth.uid &&
+            incoming().id == userId &&
+            incoming().role == 'student' &&
+            incoming().status == 'pending'
+          )
+        );
+
+      allow update: if isValidId(userId) &&
+        isEmailVerified() &&
+        isValidUserPublicProfile(incoming()) &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().id == existing().id &&
+        incoming().uid == existing().uid &&
+        incoming().registeredAt == existing().registeredAt && (
+          isAdmin() || (
+            isOwner(userId) &&
+            existing().status != 'rejected' &&
+            existing().status != 'suspended' &&
+            incoming().role == existing().role &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'age', 'serverUpdatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // Academic terms (/academic_terms/{termId})
+    match /academic_terms/{termId} {
+      allow get: if isValidId(termId) && isActiveMember();
+      allow list: if isActiveMember();
+      allow create: if isValidId(termId) &&
+        isAdmin() &&
+        isValidAcademicTerm(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(termId) &&
+        isAdmin() &&
+        isValidAcademicTerm(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'bookSubject', 'description', 'sessionsCount', 'isCurrent', 'startDate', 'endDate', 'serverUpdatedAt']);
+      allow delete: if isValidId(termId) && isAdmin();
+    }
+
+    // Assigned books per class & term (/class_assigned_books/{docId})
+    match /class_assigned_books/{docId} {
+      allow get: if isValidId(docId) && isActiveMember();
+      allow list: if isActiveMember();
+      allow create: if isValidId(docId) &&
+        isValidClassAssignedBook(incoming()) &&
+        isServantForClass(incoming().classId) &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(docId) &&
+        isValidClassAssignedBook(incoming()) &&
+        isServantForClass(existing().classId) &&
+        incoming().id == existing().id &&
+        incoming().classId == existing().classId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['bookId', 'bookName', 'testament', 'termId', 'assignedByServantName', 'assignedAt', 'targetSessionsCount', 'notes', 'customOverview', 'updatedByUid', 'serverUpdatedAt'])
+        );
+      allow delete: if isValidId(docId) && isAdmin();
+    }
+
+    // Bible study sessions (/sessions/{sessionId}) - secrets isolated out
+    match /sessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isActiveMember() && (
+        isServantForClass(existing().classId) || userDoc().classId == existing().classId
+      );
+      allow list: if isActiveMember() && (
+        isAdmin() ||
+        userDoc().role == 'assistant' ||
+        resource.data.classId == userDoc().classId
+      );
+      allow create: if isValidId(sessionId) &&
+        isValidBibleSession(incoming()) &&
+        isServantForClass(incoming().classId) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(sessionId) &&
+        isValidBibleSession(incoming()) &&
+        isServantForClass(existing().classId) &&
+        incoming().id == existing().id &&
+        incoming().classId == existing().classId &&
+        incoming().createdByUid == existing().createdByUid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'termId', 'date', 'biblePassage', 'servantName', 'qrActive', 'expiresAtMs',
+            'sessionNumber', 'bookId', 'bookName', 'testament', 'coveredChapters',
+            'objective', 'memoryVerse', 'memoryVerseRef', 'memoryVerses',
+            'lessonSummary', 'attachmentName', 'fileData', 'fileType', 'fileSize',
+            'serverUpdatedAt'
+          ])
+        );
+      allow delete: if isValidId(sessionId) && isAdmin();
+    }
+
+    // Isolated QR attendance secrets (/session_qr_secrets/{sessionId}) - NEVER readable by students
+    match /session_qr_secrets/{sessionId} {
+      allow get: if isValidId(sessionId) && isServantForClass(existing().classId);
+      allow list: if isAdmin() || (
+        hasActiveUserDoc() && (
+          userDoc().role == 'assistant' ||
+          (userDoc().role == 'servant' && resource.data.classId == userDoc().classId)
+        )
+      );
+      allow create: if isValidId(sessionId) &&
+        isValidSessionQrSecret(incoming()) &&
+        incoming().sessionId == sessionId &&
+        isServantForClass(incoming().classId) &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(sessionId) &&
+        isValidSessionQrSecret(incoming()) &&
+        incoming().sessionId == existing().sessionId &&
+        incoming().classId == existing().classId &&
+        isServantForClass(existing().classId) &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['qrSecretCode', 'qrActive', 'expiresAtMs', 'updatedByUid', 'serverUpdatedAt']);
+      allow delete: if isValidId(sessionId) && isAdmin();
+    }
+
+    // Session grades & QR attendance (/grades/{gradeId})
+    match /grades/{gradeId} {
+      allow get: if isValidId(gradeId) && isActiveMember() && (
+        isAdmin() ||
+        existing().studentId == request.auth.uid ||
+        isServantForClass(existing().classId)
+      );
+      allow list: if isActiveMember() && (
+        isAdmin() ||
+        userDoc().role == 'assistant' ||
+        resource.data.studentId == request.auth.uid ||
+        (userDoc().role == 'servant' && resource.data.classId == userDoc().classId)
+      );
+      allow create: if isValidId(gradeId) &&
+        isActiveMember() &&
+        isValidSessionGrade(incoming()) &&
+        incoming().id == gradeId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming()) &&
+        exists(/databases/$(database)/documents/sessions/$(incoming().sessionId)) && (
+          (
+            isServantForClass(sessionDoc(incoming().sessionId).classId) &&
+            (!('classId' in incoming()) || incoming().classId == sessionDoc(incoming().sessionId).classId)
+          ) || (
+            incoming().studentId == request.auth.uid &&
+            incoming().classId == sessionDoc(incoming().sessionId).classId &&
+            incoming().classId == userDoc().classId &&
+            incoming().attendance == 1 &&
+            incoming().exam == 0 &&
+            incoming().homework == 0 &&
+            incoming().participation == 0 &&
+            incoming().prayer == 0 &&
+            incoming().tools == 0 &&
+            'submittedQrCode' in incoming() &&
+            isValidStudentQrCheckin(incoming().sessionId, incoming().submittedQrCode, sessionDoc(incoming().sessionId).classId)
+          )
+        );
+      allow update: if isValidId(gradeId) &&
+        isActiveMember() &&
+        isValidSessionGrade(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().sessionId == existing().sessionId &&
+        incoming().studentId == existing().studentId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() || (
+            isServantForClass(sessionDoc(existing().sessionId).classId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['sessionTitle', 'date', 'classId', 'termId', 'exam', 'homework', 'attendance', 'participation', 'prayer', 'tools', 'notes', 'qrAttendedAt', 'updatedByUid', 'serverUpdatedAt'])
+          ) || (
+            existing().studentId == request.auth.uid &&
+            existing().attendance == 0 &&
+            incoming().attendance == 1 &&
+            incoming().exam == existing().exam &&
+            incoming().homework == existing().homework &&
+            incoming().participation == existing().participation &&
+            incoming().prayer == existing().prayer &&
+            incoming().tools == existing().tools &&
+            'submittedQrCode' in incoming() &&
+            isValidStudentQrCheckin(existing().sessionId, incoming().submittedQrCode, sessionDoc(existing().sessionId).classId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['attendance', 'submittedQrCode', 'qrAttendedAt', 'updatedByUid', 'serverUpdatedAt'])
+          )
+        );
+      allow delete: if isValidId(gradeId) && isAdmin();
+    }
+
+    // Final exam scores (/final_exams/{studentId}) - ADMIN-ONLY writes
+    match /final_exams/{studentId} {
+      allow get: if isValidId(studentId) && isActiveMember() && (
+        isAdmin() || isOwner(studentId) || isServantForClass(existing().classId)
+      );
+      allow list: if isActiveMember() && (
+        isAdmin() ||
+        userDoc().role == 'assistant' ||
+        resource.data.studentId == request.auth.uid ||
+        (userDoc().role == 'servant' && resource.data.classId == userDoc().classId)
+      );
+      allow create: if isValidId(studentId) &&
+        isAdmin() &&
+        isValidFinalExamScore(incoming()) &&
+        incoming().studentId == studentId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(studentId) &&
+        isAdmin() &&
+        isValidFinalExamScore(incoming()) &&
+        incoming().studentId == existing().studentId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['classId', 'score', 'updatedByUid', 'serverUpdatedAt']);
+      allow delete: if isValidId(studentId) && isAdmin();
+    }
+
+    // Servant preparation & absence submissions (/servant_submissions/{subId})
+    match /servant_submissions/{subId} {
+      allow get: if isValidId(subId) && isActiveMember() && (
+        isAdmin() || existing().createdByUid == request.auth.uid
+      );
+      allow list: if isActiveMember() && (
+        isAdmin() ||
+        resource.data.createdByUid == request.auth.uid
+      );
+      allow create: if isValidId(subId) &&
+        isActiveServantOrAssistant() &&
+        isValidServantSubmission(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(subId) &&
+        isActiveServantOrAssistant() &&
+        isValidServantSubmission(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().servantId == existing().servantId &&
+        incoming().createdByUid == existing().createdByUid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() || (
+            isOwner(existing().createdByUid) &&
+            existing().viewedByAdmin != true &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['prepTitle', 'prepBibleVerse', 'prepAttachmentName', 'prepAttachmentType', 'prepAttachmentData', 'prepNotes', 'absenceReason', 'serverUpdatedAt'])
+          )
+        );
+      allow delete: if isValidId(subId) && isAdmin();
+    }
+
+    // Lesson posts (/lesson_posts/{postId})
+    match /lesson_posts/{postId} {
+      allow get: if isValidId(postId) && isActiveMember() && (
+        existing().status == 'approved' || existing().createdByUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isActiveMember() && (
+        isAdmin() ||
+        resource.data.status == 'approved' ||
+        resource.data.createdByUid == request.auth.uid
+      );
+      allow create: if isValidId(postId) &&
+        isActiveServantOrAssistant() &&
+        isValidLessonPost(incoming()) &&
+        isServantForClass(incoming().classId) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming()) &&
+        (isAdmin() || incoming().status == 'pending_approval');
+      allow update: if isValidId(postId) &&
+        isActiveServantOrAssistant() &&
+        isValidLessonPost(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().servantId == existing().servantId &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() || (
+            isOwner(existing().createdByUid) &&
+            existing().status == 'pending_approval' &&
+            incoming().status == 'pending_approval' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'bibleVerse', 'content', 'attachmentName', 'attachmentUrl', 'fileData', 'fileType', 'serverUpdatedAt'])
+          )
+        );
+      allow delete: if isValidId(postId) && isAdmin();
+    }
+
+    // Digital library books (/library_books/{bookId})
+    match /library_books/{bookId} {
+      allow get: if isValidId(bookId) && isActiveMember();
+      allow list: if isActiveMember();
+      allow create: if isValidId(bookId) &&
+        isActiveServantOrAssistant() &&
+        isValidLibraryBook(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(bookId) &&
+        isActiveServantOrAssistant() &&
+        isValidLibraryBook(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() || (
+            isOwner(existing().createdByUid) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'author', 'category', 'description', 'targetClassId', 'downloadUrl', 'fileName', 'fileData', 'fileType', 'fileSize', 'pageCount', 'serverUpdatedAt'])
+          )
+        );
+      allow delete: if isValidId(bookId) && isAdmin();
+    }
+
+    // Church events (/church_events/{eventId})
+    match /church_events/{eventId} {
+      allow get: if isValidId(eventId) && isActiveMember();
+      allow list: if isActiveMember();
+      allow create: if isValidId(eventId) &&
+        isAdmin() &&
+        isValidChurchEvent(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(eventId) &&
+        isAdmin() &&
+        isValidChurchEvent(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        incoming().createdAt == existing().createdAt &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'date', 'time', 'location', 'description', 'type', 'targetAudience', 'targetClassId', 'status', 'serverUpdatedAt']);
+      allow delete: if isValidId(eventId) && isAdmin();
+    }
+
+    // Per-class year work calculation locks (/year_work_locks/{classId})
+    match /year_work_locks/{classId} {
+      allow get: if isValidId(classId) && isActiveMember();
+      allow list: if isActiveMember();
+      allow create: if isValidId(classId) &&
+        isAdmin() &&
+        isValidYearWorkLock(incoming()) &&
+        incoming().classId == classId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(classId) &&
+        isAdmin() &&
+        isValidYearWorkLock(incoming()) &&
+        incoming().classId == existing().classId &&
+        incoming().updatedByUid == request.auth.uid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['locked', 'updatedByUid', 'serverUpdatedAt']);
+      allow delete: if isValidId(classId) && isAdmin();
+    }
+
+    // Targeted notifications (/notifications/{notifId})
+    match /notifications/{notifId} {
+      allow get: if isValidId(notifId) && isActiveMember() && (
+        isAdmin() ||
+        existing().audienceUserId == request.auth.uid ||
+        existing().createdByUid == request.auth.uid ||
+        ('audienceRoles' in existing() && userDoc().role in existing().audienceRoles)
+      );
+      allow list: if isActiveMember() && (
+        isAdmin() ||
+        resource.data.audienceUserId == request.auth.uid ||
+        resource.data.createdByUid == request.auth.uid ||
+        ('audienceRoles' in resource.data && userDoc().role in resource.data.audienceRoles)
+      );
+      allow create: if isValidId(notifId) &&
+        isActiveMember() &&
+        isValidNotification(incoming()) &&
+        incoming().createdByUid == request.auth.uid &&
+        isValidServerTimestampsOnCreate(incoming());
+      allow update: if isValidId(notifId) &&
+        isActiveMember() &&
+        isValidNotification(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdByUid == existing().createdByUid &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+          isAdmin() || (
+            (
+              existing().audienceUserId == request.auth.uid ||
+              ('audienceRoles' in existing() && userDoc().role in existing().audienceRoles)
+            ) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['read', 'serverUpdatedAt'])
+          )
+        );
+      allow delete: if isValidId(notifId) && isAdmin();
+    }
+  }
+}

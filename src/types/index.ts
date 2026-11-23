@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'assistant' | 'servant' | 'student';
 
-export type UserStatus = 'active' | 'pending' | 'rejected';
+export type UserStatus = 'active' | 'pending' | 'rejected' | 'suspended';
 
 // The 7 specific classes requested:
 // 1. فصل لوحده رابعة
@@ -46,6 +46,7 @@ export interface SessionGrade {
   sessionTitle: string;
   date: string;
   studentId: string;
+  classId?: ClassId;
   termId?: string;       // معرّف الترم التابع له (افتراضياً: term_1)
   exam: number;          // من 10 (درجة الامتحان)
   homework: number;      // من 10 (الواجب)
@@ -55,6 +56,7 @@ export interface SessionGrade {
   tools: number;         // من 1 (درجة الأدوات: الكتاب المقدس والنوتة)
   notes?: string;        // ملاحظات الخادم أو تشجيع
   qrAttendedAt?: string; // وقت تسجيل الحضور عبر QR code
+  submittedQrCode?: string; // الكود الممسوح وقت التسجيل للتحقق الأمني
 }
 
 export interface StudentScoreSummary {
@@ -142,6 +144,7 @@ export interface UserProfile {
   phone: string;
   age: number;
   role: UserRole;
+  requestedRole?: 'student' | 'servant';
   status: UserStatus;
   classId?: ClassId;         // For students and class servants
   guardianPhone?: string;    // For students
@@ -150,6 +153,7 @@ export interface UserProfile {
   avatar?: string;
   registeredAt: string;
   notes?: string;
+  mergedIntoUid?: string;
 }
 
 export interface ClassAssignedBook {
@@ -195,8 +199,9 @@ export interface BibleSession {
   biblePassage: string;
   servantName: string;
   maxScorePerMetric: number; // 10
-  qrSecretCode: string;      // The unique code embedded in the session QR
+  qrSecretCode?: string;     // Secret moved to /session_qr_secrets/{sessionId}
   qrActive: boolean;         // Is the QR code currently active for scanning
+  expiresAtMs?: number;      // Unix ms timestamp for QR code expiration
 
   // Flexible curriculum fields
   sessionNumber?: number;    // رقم الحصة في الترم (1 إلى 8)
@@ -226,3 +231,20 @@ export interface AppNotification {
   audienceUserId?: string;
   audienceRoles?: UserRole[];
 }
+
+export interface SessionQrSecret {
+  sessionId: string;
+  classId: ClassId;
+  qrSecretCode: string;
+  qrActive: boolean;
+  expiresAtMs?: number;
+  updatedByUid?: string;
+}
+
+export interface FinalExamScoreDoc {
+  studentId: string;
+  classId?: ClassId;
+  score: number;
+  updatedByUid?: string;
+}
+

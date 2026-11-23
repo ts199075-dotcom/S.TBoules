@@ -19,7 +19,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = 'login',
   onLoginSuccess,
 }) => {
-  const { users, classes, registerUser, login, switchUserById } = useApp();
+  const {
+    users,
+    classes,
+    registerUser,
+    login,
+    loginWithGoogle,
+    completeGoogleRegistration,
+  } = useApp();
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [role, setRole] = useState<UserRole>('student');
@@ -33,6 +40,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [classId, setClassId] = useState<ClassId>('prep_2_3');
   const [errorMsg, setErrorMsg] = useState('');
   const [successPendingUser, setSuccessPendingUser] = useState<string | null>(null);
+  const [googlePendingProfile, setGooglePendingProfile] = useState<{
+    uid: string;
+    email: string;
+    name: string;
+  } | null>(null);
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoginPassword('');
     setErrorMsg('');
     setSuccessPendingUser(null);
+    setGooglePendingProfile(null);
   };
 
   const handleClose = () => {
@@ -62,6 +75,56 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     resetAllFields();
     setSubmitting(false);
   }, [isOpen, initialMode]);
+
+  const handleGoogleSignIn = async () => {
+    setErrorMsg('');
+    setSubmitting(true);
+    const res = await loginWithGoogle();
+    setSubmitting(false);
+    if (res.needsProfileCompletion && res.googleProfile) {
+      setGooglePendingProfile(res.googleProfile);
+      return;
+    }
+    if (!res.success) {
+      setErrorMsg(res.message);
+      return;
+    }
+    resetAllFields();
+    if (onLoginSuccess && res.role) {
+      onLoginSuccess(res.role);
+    }
+    onClose();
+  };
+
+  const handleCompleteGoogleProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!/^01\d{9}$/.test(phone.trim()) && !/^\d{10,15}$/.test(phone.trim())) {
+      setErrorMsg('برجاء إدخال رقم هاتف صحيح');
+      return;
+    }
+    if (age === '' || Number(age) < 6 || Number(age) > 90) {
+      setErrorMsg('برجاء إدخال سن صحيح بين ٦ و٩٠');
+      return;
+    }
+    setSubmitting(true);
+    const res = await completeGoogleRegistration({
+      phone: phone.trim(),
+      age: Number(age),
+      classId,
+      role: role === 'servant' ? 'servant' : 'student',
+      guardianPhone: role === 'student' ? guardianPhone.trim() : undefined,
+      confessionFather: confessionFather.trim() || undefined,
+    });
+    setSubmitting(false);
+    if (!res.success) {
+      setErrorMsg(res.message);
+      return;
+    }
+    const regName = res.name || googlePendingProfile?.name || 'عضو جديد';
+    resetAllFields();
+    setSuccessPendingUser(regName);
+  };
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +241,123 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             حسناً
           </button>
         </div>
+      ) : googlePendingProfile ? (
+        <form onSubmit={handleCompleteGoogleProfile} className="p-5 space-y-3.5 overflow-y-auto text-xs">
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-stone-800 border border-amber-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 space-y-1">
+            <div className="font-bold">مرحباً {googlePendingProfile.name}</div>
+            <div className="text-[11px] text-stone-500 dark:text-stone-400 font-mono" dir="ltr">
+              {googlePendingProfile.email}
+            </div>
+            <p className="text-[11px] text-amber-800 dark:text-amber-300">
+              استكمل رقم الهاتف والفصل الدراسي لحفظ حسابك على Firebase وانتظار اعتماد أمين الخدمة.
+            </p>
+          </div>
+          {errorMsg && (
+            <div className="p-3 rounded-xl border bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setRole('student')}
+              className={`py-2 px-3 rounded-xl border font-bold ${
+                role === 'student'
+                  ? 'border-amber-600 bg-amber-50 dark:bg-stone-800 text-amber-900 dark:text-amber-200'
+                  : 'border-stone-200 dark:border-stone-700 text-stone-600'
+              }`}
+            >
+              طالب (مخدوم)
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('servant')}
+              className={`py-2 px-3 rounded-xl border font-bold ${
+                role === 'servant'
+                  ? 'border-amber-600 bg-amber-50 dark:bg-stone-800 text-amber-900 dark:text-amber-200'
+                  : 'border-stone-200 dark:border-stone-700 text-stone-600'
+              }`}
+            >
+              خادم فصل
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold mb-1">رقم الهاتف *</label>
+              <input
+                type="tel"
+                dir="ltr"
+                required
+                className="input-field text-left font-mono"
+                placeholder="01xxxxxxxxx"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">السن *</label>
+              <input
+                type="number"
+                min={6}
+                max={90}
+                required
+                className="input-field"
+                value={age}
+                onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+            </div>
+          </div>
+          {role === 'student' && (
+            <div>
+              <label className="block font-semibold mb-1">هاتف ولي الأمر (اختياري)</label>
+              <input
+                type="tel"
+                dir="ltr"
+                className="input-field text-left font-mono"
+                placeholder="01xxxxxxxxx"
+                value={guardianPhone}
+                onChange={(e) => setGuardianPhone(e.target.value)}
+              />
+            </div>
+          )}
+          <div>
+            <label className="block font-semibold mb-1">اسم الأب الكاهن / أب الاعتراف</label>
+            <input
+              className="input-field"
+              placeholder="مثال: أبونا كيرلس"
+              value={confessionFather}
+              onChange={(e) => setConfessionFather(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block font-semibold mb-1">الفصل الدراسي *</label>
+            <select
+              className="input-field"
+              value={classId}
+              onChange={(e) => setClassId(e.target.value as ClassId)}
+            >
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.ageRange})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={submitting} className="btn-primary flex-1 disabled:opacity-60">
+              <UserPlus className="w-4 h-4" />
+              إرسال الطلب وحفظه في Firebase
+            </button>
+            <button
+              type="button"
+              onClick={() => setGooglePendingProfile(null)}
+              className="px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 font-bold"
+            >
+              رجوع
+            </button>
+          </div>
+        </form>
       ) : (
         <>
           <div className="flex border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950/50" role="tablist">
@@ -214,6 +394,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             >
               <UserPlus className="w-4 h-4" />
               طلب انضمام
+            </button>
+          </div>
+
+          <div className="px-5 pt-4">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={handleGoogleSignIn}
+              className="w-full py-2.5 px-4 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-100 font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-60"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z" />
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z" />
+                <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z" />
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z" />
+              </svg>
+              <span>تسجيل الدخول بحساب جوجل (مزامنة Firebase السحابية)</span>
             </button>
           </div>
 
@@ -478,9 +675,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   />
                   <KeyRound className="w-4 h-4 text-stone-400 absolute start-2.5 top-2.5 pointer-events-none" />
                 </div>
-                <p className="text-[11px] text-stone-500 mt-1">
-                  إن لم تُعيَّن كلمة مرور للحساب التجريبي، استخدم رقم الهاتف المسجَّل.
-                </p>
               </div>
               <button type="submit" disabled={submitting} className="btn-secondary w-full disabled:opacity-60">
                 <LogIn className="w-4 h-4 text-amber-400" />

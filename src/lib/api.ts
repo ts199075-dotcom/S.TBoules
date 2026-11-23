@@ -1,3 +1,5 @@
+import { auth } from '../firebase';
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -45,20 +47,24 @@ export async function apiRequest<T = Record<string, unknown>>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getApiToken();
   const headers = new Headers(options.headers);
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  if (token) headers.set('Authorization', `Bearer ${token}`);
 
+  let bearer = '';
   try {
-    const uid = localStorage.getItem('st_paul_current_uid_v6');
-    if (uid && !headers.has('x-user-id')) {
-      headers.set('x-user-id', uid);
+    if (auth.currentUser) {
+      bearer = await auth.currentUser.getIdToken();
     }
   } catch {
-    /* ignore */
+    bearer = '';
+  }
+  if (!bearer) {
+    bearer = getApiToken();
+  }
+  if (bearer && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${bearer}`);
   }
 
   const res = await fetch(path, { ...options, headers });

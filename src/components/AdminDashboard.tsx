@@ -77,7 +77,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     restoreBackupJson,
     forceSyncDatabase,
     approveUser,
+    approveUserWithDetails,
     rejectUser,
+    suspendUser,
+    reactivateUser,
     toggleAssistantRole,
     deleteUser,
     deleteSession,
@@ -97,11 +100,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     getStudentScoreSummary,
     getClassLeaderboard,
     getStudentSessionGrades,
-    resetDemoData,
     logout,
-    seedDemoData,
-    clearAllStudentsAndServants,
+    firebaseUser,
+    firebaseSyncing,
+    firebaseError,
+    loginWithGoogle,
+    syncNowToFirebase,
+    runSafeMigration,
   } = useApp();
+
+  const [firebaseSyncMsg, setFirebaseSyncMsg] = useState<string | null>(null);
+  const [pendingRoleDrafts, setPendingRoleDrafts] = useState<Record<string, UserProfile['role']>>({});
+  const [pendingClassDrafts, setPendingClassDrafts] = useState<Record<string, ClassId>>({});
+  const [pendingMergeDrafts, setPendingMergeDrafts] = useState<Record<string, string>>({});
 
   const [featuresModalOpen, setFeaturesModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab || 'students');
@@ -286,23 +297,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setBackupStatusMessage(null), 5000);
   };
 
-  // Strict check: only admin can view this dashboard
-  if (!currentUser || currentUser.role !== 'admin') {
-    return (
-      <div className="max-w-md mx-auto my-16 p-8 text-center bg-white dark:bg-stone-900 rounded-3xl border border-stone-200 dark:border-stone-800 shadow-xl space-y-4 text-stone-900 dark:text-stone-100">
-        <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mx-auto">
-          <Shield className="w-8 h-8" />
-        </div>
-        <h3 className="font-bold text-lg">
-          لوحة تحكم محظورة
-        </h3>
-        <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
-          هذه اللوحة مخصصة حصرياً لمسؤول النظام (أمين الخدمة: ts199075@gmail.com).
-        </p>
-      </div>
-    );
-  }
-
   // Grading Modal State
   const [gradingModalOpen, setGradingModalOpen] = useState(false);
   const [selectedStudentForGrading, setSelectedStudentForGrading] = useState<UserProfile | null>(null);
@@ -343,6 +337,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Detailed Student Profile Modal
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState<UserProfile | null>(null);
+
+  // Strict check: only admin can view this dashboard (after all hooks)
+  if (!currentUser || currentUser.role !== 'admin') {
+    return (
+      <div className="max-w-md mx-auto my-16 p-8 text-center bg-white dark:bg-stone-900 rounded-3xl border border-stone-200 dark:border-stone-800 shadow-xl space-y-4 text-stone-900 dark:text-stone-100">
+        <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mx-auto">
+          <Shield className="w-8 h-8" />
+        </div>
+        <h3 className="font-bold text-lg">
+          لوحة تحكم محظورة
+        </h3>
+        <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+          هذه اللوحة مخصصة حصرياً لمسؤول النظام (أمين الخدمة: ts199075@gmail.com).
+        </p>
+      </div>
+    );
+  }
 
   // Pending users and pending posts counts
   const pendingUsers = users.filter((u) => u.status === 'pending');
@@ -515,6 +526,111 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <div className="text-amber-100/70 text-[11px]">فصول معتمدة</div>
           </div>
+
+          <button
+            type="button"
+            disabled={firebaseSyncing}
+            onClick={() => {
+              void (async () => {
+                setFirebaseSyncMsg(null);
+                const res = firebaseUser ? await syncNowToFirebase() : await loginWithGoogle();
+                setFirebaseSyncMsg(res.message);
+                setTimeout(() => setFirebaseSyncMsg(null), 6000);
+              })();
+            }}
+            className={`p-3 px-4 rounded-2xl border text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
+              firebaseUser
+                ? 'bg-emerald-950/70 hover:bg-emerald-900 text-emerald-200 border-emerald-600/60'
+                : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400/60'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>
+              {firebaseSyncing
+                ? 'جاري الحفظ...'
+                : firebaseUser
+                  ? 'مزامنة Firebase'
+                  : 'ربط Firebase بجوجل'}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {(firebaseSyncMsg || firebaseError || backupStatusMessage) && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 ${
+            firebaseError && !firebaseSyncMsg && !backupStatusMessage
+              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+          }`}
+        >
+          <span>{firebaseSyncMsg || backupStatusMessage || firebaseError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setFirebaseSyncMsg(null);
+              setBackupStatusMessage(null);
+            }}
+            className="text-current opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Safe Cloud Migration & JSON Backup Bar */}
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 font-bold">
+          <Database className="w-4 h-4 text-amber-600" />
+          <span>أدوات أمان البيانات والنسخ الاحتياطي الآمن (بدون حذف أي بيانات)</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={firebaseSyncing || backupRestoreLoading}
+            onClick={() => {
+              void (async () => {
+                setFirebaseSyncMsg(null);
+                const report = await runSafeMigration();
+                if (!report) {
+                  setFirebaseSyncMsg('تعذر تشغيل الترحيل الآمن: يرجى تسجيل الدخول بحساب جوجل للأدمن أولاً.');
+                } else if (report.alreadyClean) {
+                  setFirebaseSyncMsg('بيانات Firebase محدثة ومنظمة بالكامل بالفعل ✅ (لم يلزم تعديل أي سجلات).');
+                } else {
+                  setFirebaseSyncMsg(
+                    `تم الترحيل الآمن بنجاح ✅ (أكواد QR: ${report.migratedQrSecrets} • درجات: ${report.backfilledGradeClassIds} • امتحانات: ${report.backfilledFinalExamClassIds})`
+                  );
+                }
+                setTimeout(() => setFirebaseSyncMsg(null), 7000);
+              })();
+            }}
+            className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>ترحيل وتحديث هيكل البيانات بأمان</span>
+          </button>
+          <button
+            type="button"
+            onClick={exportBackupJson}
+            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-600" />
+            <span>تنزيل نسخة احتياطية JSON</span>
+          </button>
+          <label className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5 cursor-pointer">
+            <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+            <span>دمج نسخة JSON</span>
+            <input type="file" accept=".json,application/json" className="hidden" onChange={handleRestoreFileSelected} />
+          </label>
+          <button
+            type="button"
+            disabled={backupRestoreLoading}
+            onClick={handleForceSync}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>حفظ ومزامنة الخادم</span>
+          </button>
         </div>
       </div>
 
@@ -788,6 +904,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           changeStudentClass={changeStudentClass}
           deleteUser={deleteUser}
           approveUser={approveUser}
+          suspendUser={suspendUser}
+          reactivateUser={reactivateUser}
           onOpenGrading={handleOpenGrading}
           onOpenCertificate={handleOpenCertificate}
           onSelectStudentProfile={setSelectedStudentForProfile}
@@ -805,6 +923,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           updateServantProfile={updateServantProfile}
           toggleAssistantRole={toggleAssistantRole}
           deleteUser={deleteUser}
+          suspendUser={suspendUser}
+          reactivateUser={reactivateUser}
         />
       )}
 
@@ -1297,7 +1417,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {pendingUsers.map((pUser) => {
-                const targetClass = classes.find((c) => c.id === pUser.classId);
+                const requestedRole = pUser.requestedRole || pUser.role || 'student';
+                const chosenRole = pendingRoleDrafts[pUser.id] || (requestedRole === 'servant' ? 'servant' : 'student');
+                const chosenClass = pendingClassDrafts[pUser.id] || pUser.classId || 'primary_4';
+                const chosenMergeId = pendingMergeDrafts[pUser.id] || '';
+                const legacyCandidates = users.filter(
+                  (u) =>
+                    u.id !== pUser.id &&
+                    u.status === 'active' &&
+                    u.role !== 'admin' &&
+                    !u.mergedIntoUid &&
+                    ((pUser.phone && u.phone === pUser.phone) ||
+                      (pUser.email && u.email?.toLowerCase() === pUser.email.toLowerCase()) ||
+                      u.name.trim() === pUser.name.trim())
+                );
+                const targetClass = classes.find((c) => c.id === chosenClass);
 
                 return (
                   <div
@@ -1308,7 +1442,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div>
                         <div className="font-bold text-slate-900 dark:text-slate-100 text-base">{pUser.name}</div>
                         <div className="text-amber-800 dark:text-amber-400 font-semibold mt-0.5">
-                          {pUser.role === 'servant' ? '✝️ يطلب الانضمام كـ خادم' : '📖 يطلب الالتحاق كـ مخدوم (طالب)'}
+                          {requestedRole === 'servant' ? '✝️ يطلب الانضمام كـ خادم' : '📖 يطلب الالتحاق كـ مخدوم (طالب)'}
                         </div>
                       </div>
 
@@ -1318,24 +1452,99 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5 text-slate-700 dark:text-slate-300">
-                      <div>• <strong>رقم الهاتف:</strong> <span className="font-mono">{pUser.phone}</span></div>
+                      <div>• <strong>رقم الهاتف:</strong> <span className="font-mono">{pUser.phone || 'غير مسجل'}</span></div>
+                      {pUser.email && (
+                        <div>• <strong>البريد:</strong> <span className="font-mono">{pUser.email}</span></div>
+                      )}
                       {pUser.guardianPhone && (
                         <div>• <strong>هاتف ولي الأمر:</strong> <span className="font-mono">{pUser.guardianPhone}</span></div>
                       )}
                       <div>• <strong>السن:</strong> {pUser.age} سنة</div>
-                      {pUser.classId && (
-                        <div>• <strong>الفصل المطلوب:</strong> <span className="font-bold text-amber-900 dark:text-amber-400">{targetClass?.name}</span></div>
-                      )}
+                      <div>• <strong>الفصل المختار للاعتماد:</strong> <span className="font-bold text-amber-900 dark:text-amber-400">{targetClass?.name}</span></div>
                       <div>• <strong>أب الاعتراف:</strong> {pUser.confessionFather || 'لم يُحدد'}</div>
                     </div>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          تعيين الدور عند القبول:
+                        </label>
+                        <select
+                          value={chosenRole}
+                          onChange={(e) =>
+                            setPendingRoleDrafts((prev) => ({
+                              ...prev,
+                              [pUser.id]: e.target.value as UserProfile['role'],
+                            }))
+                          }
+                          className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                        >
+                          <option value="student">📖 طالب (مخدوم)</option>
+                          <option value="servant">✝️ خادم فصل</option>
+                          <option value="assistant">🛡️ مساعد إدارة</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          تحديد الفصل الدراسي:
+                        </label>
+                        <select
+                          value={chosenClass}
+                          onChange={(e) =>
+                            setPendingClassDrafts((prev) => ({
+                              ...prev,
+                              [pUser.id]: e.target.value as ClassId,
+                            }))
+                          }
+                          className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                        >
+                          {classes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {legacyCandidates.length > 0 && (
+                      <div>
+                        <label className="block font-bold text-amber-800 dark:text-amber-300 mb-1">
+                          ربط ونقل درجات حساب سابق مطابق (اختياري):
+                        </label>
+                        <select
+                          value={chosenMergeId}
+                          onChange={(e) =>
+                            setPendingMergeDrafts((prev) => ({
+                              ...prev,
+                              [pUser.id]: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 font-bold"
+                        >
+                          <option value="">بدون دمج (حساب جديد مستقل)</option>
+                          {legacyCandidates.map((lc) => (
+                            <option key={lc.id} value={lc.id}>
+                              دمج من: {lc.name} ({lc.phone || lc.id})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-2 pt-1">
                       <button
-                        onClick={() => approveUser(pUser.id)}
+                        onClick={() =>
+                          approveUserWithDetails(pUser.id, {
+                            role: chosenRole,
+                            classId: chosenClass,
+                            mergeFromLegacyId: chosenMergeId || undefined,
+                          })
+                        }
                         className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Check className="w-4 h-4" />
-                        <span>قبول واعتماد الدخول للفصل ✅</span>
+                        <span>قبول واعتماد الدور والفصل ✅</span>
                       </button>
 
                       <button

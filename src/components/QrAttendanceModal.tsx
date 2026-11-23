@@ -19,7 +19,6 @@ import {
   RefreshCw,
   Upload,
   AlertTriangle,
-  Zap,
 } from 'lucide-react';
 
 interface QrAttendanceModalProps {
@@ -33,16 +32,16 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
   mode,
   onClose,
 }) => {
-  const { currentUser, grades, users, recordQrAttendance } = useApp();
+  const { currentUser, grades, users, sessionQrSecrets, recordQrAttendance, rotateSessionQr } = useApp();
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [scanSuccessMsg, setScanSuccessMsg] = useState<string | null>(null);
   const [scanErrorMsg, setScanErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rotatingCode, setRotatingCode] = useState(false);
 
   // Camera States
   const [cameraState, setCameraState] = useState<'idle' | 'requesting' | 'active' | 'denied' | 'unsupported' | 'error'>('idle');
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
-  const [manualCode, setManualCode] = useState<string>(session?.qrSecretCode || '');
   const [inputCode, setInputCode] = useState<string>('');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -50,14 +49,20 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
 
-  // Generate QR Code data URL for servant display
+  const activeSecretObj = session ? sessionQrSecrets[session.id] : undefined;
+  const activeCode = activeSecretObj?.qrSecretCode || session?.qrSecretCode || '';
+
+  // Generate QR Code data URL for servant display only when activeCode exists
   useEffect(() => {
-    if (!session) return;
+    if (!session || mode !== 'servant_display' || !activeCode) {
+      setQrDataUrl('');
+      return;
+    }
     const payload = JSON.stringify({
       app: 'st_paul_bible_school',
       sessionId: session.id,
       sessionTitle: session.title,
-      code: session.qrSecretCode,
+      code: activeCode,
       classId: session.classId,
       date: session.date,
     });
@@ -66,13 +71,13 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
       width: 320,
       margin: 2,
       color: {
-        dark: '#78350f', // deep amber
-        light: '#fffbeb', // warm amber tint
+        dark: '#78350f',
+        light: '#fffbeb',
       },
     })
       .then((url) => setQrDataUrl(url))
       .catch((err) => console.error(err));
-  }, [session]);
+  }, [session, mode, activeCode]);
 
   // List of students who have attended this session
   const attendedGrades = session
@@ -100,16 +105,20 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
   const handleExecuteAttendance = useCallback(
     async (codeToVerify?: string) => {
       if (!currentUser || !session) return;
+      const secret = (codeToVerify ?? inputCode ?? '').trim();
+      if (!secret) {
+        setScanErrorMsg('يرجى مسح باركود الجلسة بالكاميرا أو كتابة الكود الظاهر مع الخادم أولاً.');
+        return;
+      }
       setIsSubmitting(true);
       setScanErrorMsg(null);
 
       try {
-        const secret = (codeToVerify || inputCode || session.qrSecretCode || '').trim();
         const res = await recordQrAttendance(currentUser.id, session.id, secret);
         if (res.success) {
           triggerSuccessCelebration(res.message);
         } else {
-          setScanErrorMsg(res.message || 'كود الحضور غير متطابق. تأكد من إدخال الكود الظاهر مع الخادم.');
+          setScanErrorMsg(res.message || 'كود الحضور غير متطابق أو منتهي الصلاحية.');
         }
       } catch (err: any) {
         setScanErrorMsg(err?.message || 'تعذر تسجيل الحضور. يرجى المحاولة مرة أخرى.');
@@ -358,10 +367,34 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
                 </div>
               )}
 
-              <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2">
                 <div className="font-bold text-slate-900 dark:text-amber-200">{session?.title}</div>
-                <div className="text-[12px] text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 px-3 py-1 rounded-xl border border-amber-200 dark:border-slate-700">
-                  رمز الجلسة المكتوب: <strong className="font-mono text-amber-900 dark:text-amber-300 text-sm">{session?.qrSecretCode}</strong>
+                <div className="text-[12px] text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 px-3 py-1.5 rounded-xl border border-amber-200 dark:border-slate-700">
+                  رمز الجلسة المكتوب:{' '}
+                  <strong className="font-mono text-amber-900 dark:text-amber-300 text-sm">
+                    {activeCode || 'غير متاح — اضغط تجديد الكود'}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+                  {activeSecretObj?.expiresAtMs && (
+                    <span className="inline-flex items-center gap-1 text-[10px] px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold">
+                      <Clock className="w-3 h-3" />
+                      صالح حتى {new Date(activeSecretObj.expiresAtMs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={rotatingCode}
+                    onClick={() => {
+                      if (!session) return;
+                      setRotatingCode(true);
+                      void rotateSessionQr(session.id).finally(() => setRotatingCode(false));
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${rotatingCode ? 'animate-spin' : ''}`} />
+                    <span>{rotatingCode ? 'جارٍ التجديد...' : 'تجديد كود الحضور'}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -499,7 +532,7 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
                           : 'الكاميرا متوقفة حالياً'}
                       </div>
                       <p className="text-[10px] text-slate-400 max-w-xs">
-                        يمكنك استخدام خيار «التأكيد الفوري» أو كتابة رمز الجلسة أدناه لتسجيل الحضور دون كاميرا.
+                        يمكنك رفع صورة الباركود أو كتابة رمز الجلسة الظاهر لدى الخادم أدناه لتسجيل الحضور.
                       </p>
                       <button
                         type="button"
@@ -523,25 +556,10 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
                   </div>
                 )}
 
-                {/* Instant Attendance Button (No Camera Required) */}
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => handleExecuteAttendance(session?.qrSecretCode)}
-                    disabled={isSubmitting}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <Zap className="w-4 h-4 text-amber-300" />
-                    <span>
-                      {isSubmitting ? 'جارٍ تسجيل الحضور...' : 'تسجيل وتأكيد حضوري الفوري (١ من ١) بنقرة واحدة ✅'}
-                    </span>
-                  </button>
-                </div>
-
                 {/* Manual Code Entry & Photo Upload Alternative */}
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
                   <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>أو أدخل كود الجلسة يدوياً:</span>
+                    <span>أو أدخل كود الجلسة الظاهر مع الخادم:</span>
                     <label className="text-[11px] text-amber-700 dark:text-amber-400 font-bold hover:underline cursor-pointer flex items-center gap-1">
                       <Upload className="w-3 h-3" />
                       <span>رفع صورة الباركود</span>
@@ -559,13 +577,13 @@ export const QrAttendanceModal: React.FC<QrAttendanceModalProps> = ({
                       type="text"
                       value={inputCode}
                       onChange={(e) => setInputCode(e.target.value)}
-                      placeholder={session?.qrSecretCode || 'اكتب كود الجلسة (مثال: STPAUL-...)'}
+                      placeholder="اكتب كود الجلسة الظاهر مع الخادم"
                       className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono placeholder:text-slate-400 text-center uppercase focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                     <button
                       type="button"
-                      onClick={() => handleExecuteAttendance(inputCode || session?.qrSecretCode)}
-                      disabled={isSubmitting}
+                      onClick={() => handleExecuteAttendance(inputCode)}
+                      disabled={isSubmitting || !inputCode.trim()}
                       className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
                     >
                       تأكيد

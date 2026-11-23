@@ -140,9 +140,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {currentUser ? (
               <button
                 onClick={() => {
-                  if (currentUser.role === 'admin' || currentUser.role === 'assistant') {
+                  if (currentUser.role === 'admin') {
                     onNavigateTab('admin');
-                  } else if (currentUser.role === 'servant') {
+                  } else if (currentUser.role === 'servant' || currentUser.role === 'assistant') {
                     onNavigateTab('servant');
                   } else {
                     onNavigateTab('student');

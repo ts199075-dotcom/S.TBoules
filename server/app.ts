@@ -10,7 +10,8 @@ import {
   UserRole,
   ChurchEvent,
 } from '../src/types';
-import { CLASSES_LIST, SAMPLE_USERS } from '../src/data/mockData';
+import { randomBytes } from 'node:crypto';
+import { CLASSES_LIST } from '../src/data/mockData';
 import {
   clamp,
   computeClassLeaderboard,
@@ -19,7 +20,24 @@ import {
   publicUser,
 } from '../src/lib/scores';
 import { createToken, hashPassword, sessionExpiry, verifyPassword } from './auth';
-import { DbShape, loadDb, resetDb, saveDb, withDb, mergeStateIntoDb } from './store';
+import { verifyFirebaseIdToken } from './firebaseAuth';
+import { DbShape, loadDb, saveDb, withDb, mergeStateIntoDb } from './store';
+
+const SUPER_ADMIN_EMAIL = 'ts199075@gmail.com';
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^https?:\/\/localhost(:\d+)?$/i,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/i,
+  /^https:\/\/[a-z0-9-]+\.run\.app$/i,
+  /^https:\/\/geometric-agency-vl37k\.(web\.app|firebaseapp\.com)$/i,
+];
+
+function generateSecretToken(prefix = 'STPAUL'): string {
+  return `${prefix}-${randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+function generateRandomSuffix(): string {
+  return randomBytes(3).toString('hex');
+}
 
 const CLASS_IDS: ClassId[] = [
   'primary_4',
@@ -113,34 +131,72 @@ function getToken(req: Request): string | null {
   return null;
 }
 
-function resolveUser(db: DbShape, req: Request): UserProfile | null {
+async function resolveUser(db: DbShape, req: Request): Promise<UserProfile | null> {
   const token = getToken(req);
-  if (token) {
-    const now = Date.now();
-    db.authSessions = db.authSessions.filter((s) => new Date(s.expiresAt).getTime() > now);
-    const found = db.authSessions.find((s) => s.token === token);
-    if (found) {
-      const u = db.users.find((user) => user.id === found.userId);
-      if (u) return u;
-    }
+  if (!token) return null;
+
+  const now = Date.now();
+  db.authSessions = db.authSessions.filter((s) => new Date(s.expiresAt).getTime() > now);
+  const found = db.authSessions.find((s) => s.token === token);
+  if (found) {
+    const u = db.users.find((user) => user.id === found.userId);
+    if (u && u.status === 'active') return u;
+    return null;
   }
 
-  // Fallback: Header x-user-id
-  const uid = req.headers['x-user-id'];
-  if (typeof uid === 'string' && uid) {
-    const u = db.users.find((user) => user.id === uid);
-    if (u) return u;
+  // Verify RS256 Firebase ID Token if Bearer token is a JWT
+  if (token.split('.').length === 3) {
+    const verified = await verifyFirebaseIdToken(token);
+    if (!verified) return null;
+
+    const emailLower = (verified.email || '').trim().toLowerCase();
+    if (emailLower === SUPER_ADMIN_EMAIL && verified.emailVerified) {
+      const existingAdmin = db.users.find(
+        (u) => u.id === verified.uid || u.email?.toLowerCase() === SUPER_ADMIN_EMAIL
+      );
+      if (existingAdmin) {
+        return {
+          ...existingAdmin,
+          role: 'admin',
+          status: 'active',
+        };
+      }
+      return {
+        id: verified.uid,
+        name: verified.name || 'أمين الخدمة',
+        email: SUPER_ADMIN_EMAIL,
+        phone: '',
+        age: 35,
+        role: 'admin',
+        status: 'active',
+        registeredAt: todayIso(),
+      };
+    }
+
+    const matched = db.users.find(
+      (u) =>
+        u.id === verified.uid ||
+        (emailLower && verified.emailVerified && u.email?.toLowerCase() === emailLower)
+    );
+    if (matched && matched.status === 'active') {
+      return matched;
+    }
   }
 
   return null;
 }
 
-function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
-  const db = loadDb();
-  const user = resolveUser(db, req);
-  if (!user) return jsonError(res, 401, 'يلزم تسجيل الدخول.');
-  req.user = user;
-  next();
+async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  try {
+    const db = loadDb();
+    const user = await resolveUser(db, req);
+    if (!user) return jsonError(res, 401, 'يلزم تسجيل الدخول بحساب مفعل.');
+    if (user.status !== 'active') return jsonError(res, 403, 'الحساب غير نشط أو قيد المراجعة.');
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 function requireRoles(roles: UserRole[]) {
@@ -167,7 +223,7 @@ function pushNotif(
   partial: Omit<AppNotification, 'id' | 'timestamp' | 'read'> & Partial<Pick<AppNotification, 'read'>>
 ) {
   db.notifications.unshift({
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: `notif-${Date.now()}-${generateRandomSuffix()}`,
     timestamp: nowStamp(),
     read: false,
     ...partial,
@@ -214,12 +270,12 @@ export function createApiApp() {
 
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
+    if (origin && ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin))) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
     }
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Session-Token');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     if (req.method === 'OPTIONS') return res.status(204).end();
     next();
   });
@@ -238,6 +294,9 @@ export function createApiApp() {
     const result = await withDb((db) => {
       const found = findUserByIdentifier(db, identifier);
       if (!found) return { status: 404, message: 'لم يتم العثور على حساب بهذا البريد أو رقم الهاتف.' };
+      if (found.status === 'suspended') {
+        return { status: 403, message: 'هذا الحساب موقوف مؤقتاً. تواصل مع أمين الخدمة.' };
+      }
       if (found.status === 'rejected') {
         return { status: 403, message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.' };
       }
@@ -247,8 +306,13 @@ export function createApiApp() {
           message: 'أسف، برجاء انتظار موافقة أمين الخدمة على حسابك أولاً',
         };
       }
-      const expected = found.password || found.phone;
-      const ok = found.password ? verifyPassword(password, found.password) : expected === password;
+      if (!found.password) {
+        return {
+          status: 403,
+          message: 'هذا الحساب مرتبط بتسجيل جوجل. يرجى تسجيل الدخول باستخدام زر جوجل.',
+        };
+      }
+      const ok = verifyPassword(password, found.password);
       if (!ok) return { status: 401, message: 'كلمة المرور غير صحيحة.' };
 
       const token = createToken();
@@ -322,10 +386,9 @@ export function createApiApp() {
     res.json({ success: true });
   });
 
-  app.get('/api/state', (req, res) => {
+  app.get('/api/state', requireAuth, (req: AuthedRequest, res) => {
     const db = loadDb();
-    const user = resolveUser(db, req);
-    res.json({ success: true, ...statePayload(db, user) });
+    res.json({ success: true, ...statePayload(db, req.user || null) });
   });
 
   app.post('/api/users/:id/approve', requireAuth, requireRoles(['admin', 'assistant']), async (req: AuthedRequest, res) => {
@@ -436,7 +499,7 @@ export function createApiApp() {
           biblePassage: String(req.body?.biblePassage || req.body?.coveredChapters || 'شواهد مختارة'),
           servantName: String(req.body?.servantName || req.user?.name || 'خادم الفصل'),
           maxScorePerMetric: 10,
-          qrSecretCode: `STPAUL-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+          qrSecretCode: generateSecretToken(),
           qrActive: true,
           sessionNumber: Number(req.body?.sessionNumber) || 1,
           bookId: req.body?.bookId ? String(req.body.bookId) : undefined,
@@ -459,7 +522,7 @@ export function createApiApp() {
       const existingIdx = db.grades.findIndex((g) => g.sessionId === sessionId && g.studentId === studentId);
       const prev = existingIdx >= 0 ? db.grades[existingIdx] : undefined;
       const completeRecord: SessionGrade = {
-        id: prev?.id || `grd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: prev?.id || `grd-${Date.now()}-${generateRandomSuffix()}`,
         sessionId,
         sessionTitle: session.title,
         date: session.date,
@@ -496,6 +559,9 @@ export function createApiApp() {
     const sessionId = String(req.body?.sessionId || sessionMeta.id || `sess-${Date.now()}`);
     const gradesList = Array.isArray(req.body?.grades) ? req.body.grades : [];
     const classId = (sessionMeta.classId || req.user?.classId || 'prep_2_3') as ClassId;
+    if (req.user?.role === 'servant' && req.user.classId && classId !== req.user.classId) {
+      return jsonError(res, 403, 'لا يمكنك رصد درجات خارج فصلك الدراسي.');
+    }
 
     const result = await withDb((db) => {
       let session = db.sessions.find((s) => s.id === sessionId);
@@ -509,7 +575,7 @@ export function createApiApp() {
           biblePassage: String(sessionMeta.biblePassage || sessionMeta.coveredChapters || 'شواهد مختارة'),
           servantName: String(sessionMeta.servantName || req.user?.name || 'خادم الفصل'),
           maxScorePerMetric: 10,
-          qrSecretCode: `STPAUL-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+          qrSecretCode: generateSecretToken(),
           qrActive: true,
           sessionNumber: Number(sessionMeta.sessionNumber) || 1,
           bookId: sessionMeta.bookId ? String(sessionMeta.bookId) : undefined,
@@ -548,10 +614,14 @@ export function createApiApp() {
       for (const g of gradesList) {
         const studentId = String(g.studentId || '');
         if (!studentId) continue;
+        const student = db.users.find((u) => u.id === studentId);
+        if (req.user?.role === 'servant' && req.user.classId && student?.classId && student.classId !== req.user.classId) {
+          continue;
+        }
         const existingIdx = db.grades.findIndex((ex) => ex.sessionId === session!.id && ex.studentId === studentId);
         const prev = existingIdx >= 0 ? db.grades[existingIdx] : undefined;
         const completeRecord: SessionGrade = {
-          id: prev?.id || `grd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: prev?.id || `grd-${Date.now()}-${generateRandomSuffix()}`,
           sessionId: session.id,
           sessionTitle: session.title,
           date: session.date,
@@ -596,6 +666,9 @@ export function createApiApp() {
 
     if (!classId || !bookId || !bookName) {
       return jsonError(res, 400, 'بيانات السفر والفصل ناقصة.');
+    }
+    if (req.user?.role === 'servant' && req.user.classId && classId !== req.user.classId) {
+      return jsonError(res, 403, 'لا يمكنك تعديل مقرر فصل آخر.');
     }
 
     const result = await withDb((db) => {
@@ -697,10 +770,17 @@ export function createApiApp() {
 
   app.post('/api/sessions/:id/qr', requireAuth, requireRoles(['admin', 'assistant', 'servant']), async (req: AuthedRequest, res) => {
     const active = Boolean(req.body?.active);
+    const rotate = Boolean(req.body?.rotate);
     const result = await withDb((db) => {
       const session = db.sessions.find((s) => s.id === req.params.id);
       if (!session) return { status: 404, message: 'اللقاء غير موجود.' };
+      if (req.user?.role === 'servant' && req.user.classId && session.classId !== req.user.classId) {
+        return { status: 403, message: 'لا يمكنك إدارة باركود فصل آخر.' };
+      }
       session.qrActive = active;
+      if (rotate || !session.qrSecretCode) {
+        session.qrSecretCode = generateSecretToken();
+      }
       return { status: 200, state: statePayload(db, req.user || null) };
     });
     if (result.status !== 200) return jsonError(res, result.status, result.message || 'فشل');
@@ -725,6 +805,9 @@ export function createApiApp() {
     const classId = req.body?.classId as ClassId;
     if (!title) return jsonError(res, 400, 'عنوان اللقاء مطلوب.');
     if (!CLASS_IDS.includes(classId)) return jsonError(res, 400, 'فصل غير صالح.');
+    if (req.user?.role === 'servant' && req.user.classId && classId !== req.user.classId) {
+      return jsonError(res, 403, 'لا يمكنك إنشاء لقاء خارج فصلك.');
+    }
 
     const result = await withDb((db) => {
       const sessionId = req.body?.id ? String(req.body.id) : `sess-${Date.now()}`;
@@ -739,7 +822,10 @@ export function createApiApp() {
         biblePassage: String(req.body?.biblePassage || req.body?.coveredChapters || 'شواهد مختارة'),
         servantName: String(req.body?.servantName || req.user?.name || 'أمانة الخدمة'),
         maxScorePerMetric: 10,
-        qrSecretCode: req.body?.qrSecretCode || `STPAUL-${Date.now().toString(36).toUpperCase()}`,
+        qrSecretCode:
+          existingIdx >= 0 && db.sessions[existingIdx].qrSecretCode
+            ? db.sessions[existingIdx].qrSecretCode
+            : generateSecretToken(),
         qrActive: req.body?.qrActive !== undefined ? Boolean(req.body.qrActive) : true,
         sessionNumber: req.body?.sessionNumber !== undefined ? Number(req.body.sessionNumber) : undefined,
         bookId: req.body?.bookId ? String(req.body.bookId) : undefined,
@@ -923,10 +1009,18 @@ export function createApiApp() {
   });
 
   app.post('/api/notifications/:id/read', requireAuth, async (req: AuthedRequest, res) => {
+    const actor = req.user!;
     const result = await withDb((db) => {
       const n = db.notifications.find((item) => item.id === req.params.id);
-      if (n) n.read = true;
-      return statePayload(db, req.user || null);
+      if (n) {
+        const isOwner =
+          actor.role === 'admin' ||
+          actor.role === 'assistant' ||
+          n.audienceUserId === actor.id ||
+          n.audienceRoles?.includes(actor.role);
+        if (isOwner) n.read = true;
+      }
+      return statePayload(db, actor);
     });
     res.json({ success: true, ...result });
   });
@@ -939,21 +1033,12 @@ export function createApiApp() {
     res.json({ success: true, ...result });
   });
 
-  app.post('/api/admin/reset', requireAuth, requireRoles(['admin']), async (req: AuthedRequest, res) => {
-    const db = resetDb();
-    const admin = db.users.find((u) => u.role === 'admin') || null;
-    res.json({ success: true, ...statePayload(db, admin) });
+  app.post('/api/admin/reset', requireAuth, requireRoles(['admin']), (_req, res) => {
+    return jsonError(res, 410, 'تم تعطيل مسح أو إعادة ضبط البيانات في وضع الإنتاج لحماية السجلات.');
   });
 
-  app.post('/api/admin/seed', requireAuth, requireRoles(['admin']), async (req: AuthedRequest, res) => {
-    const result = await withDb((db) => {
-      const extras = SAMPLE_USERS.filter((u) => !db.users.some((x) => x.id === u.id || x.phone === u.phone)).map(
-        (u) => ({ ...u, password: hashPassword(u.phone) })
-      );
-      db.users = [...db.users, ...extras];
-      return statePayload(db, req.user || null);
-    });
-    res.json({ success: true, ...result });
+  app.post('/api/admin/seed', requireAuth, requireRoles(['admin']), (_req, res) => {
+    return jsonError(res, 410, 'تم تعطيل حقن البيانات التجريبية في وضع الإنتاج لحماية السجلات.');
   });
 
   app.get('/api/scores/:studentId', requireAuth, (req: AuthedRequest, res) => {
@@ -981,7 +1066,7 @@ export function createApiApp() {
   });
 
   // Library endpoints
-  app.get('/api/library', (_req, res) => {
+  app.get('/api/library', requireAuth, (_req, res) => {
     const db = loadDb();
     res.json({ success: true, books: db.libraryBooks || [] });
   });
@@ -1098,6 +1183,19 @@ export function createApiApp() {
           if (req.body.role) u.role = req.body.role;
           if (req.body.classId !== undefined) u.classId = req.body.classId;
         }
+      } else if (action === 'suspend') {
+        const targetId = String(req.body.userId || req.body.id || '');
+        const target = db.users.find((u) => u.id === targetId);
+        if (target && target.role !== 'admin') {
+          target.status = 'suspended';
+          db.authSessions = db.authSessions.filter((s) => s.userId !== targetId);
+        }
+      } else if (action === 'reactivate') {
+        const targetId = String(req.body.userId || req.body.id || '');
+        const target = db.users.find((u) => u.id === targetId);
+        if (target) {
+          target.status = 'active';
+        }
       } else if (action === 'delete' || action === 'deleteUser') {
         const targetId = String(req.body.userId || req.body.id || '');
         const target = db.users.find((u) => u.id === targetId);
@@ -1129,7 +1227,7 @@ export function createApiApp() {
   });
 
   // --- CHURCH EVENTS CRUD (User Request 2) ---
-  app.get('/api/events', (_req, res) => {
+  app.get('/api/events', requireAuth, (_req, res) => {
     const db = loadDb();
     res.json({ success: true, events: db.churchEvents || [] });
   });
@@ -1139,7 +1237,7 @@ export function createApiApp() {
     if (!title) return jsonError(res, 400, 'عنوان المناسبة أو الحفلة مطلوب.');
     const result = await withDb((db) => {
       const newEvent: ChurchEvent = {
-        id: req.body?.id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: req.body?.id || `evt-${Date.now()}-${generateRandomSuffix()}`,
         title,
         date: String(req.body?.date || todayIso()),
         time: req.body?.time ? String(req.body.time) : undefined,
@@ -1200,13 +1298,12 @@ export function createApiApp() {
     res.json({ success: true, ...result.state });
   });
 
-  // --- SYNC & DISASTER RESILIENCY ENDPOINTS (User Request 5) ---
-  app.post('/api/sync/push', async (req, res) => {
+  // --- SYNC & DISASTER RESILIENCY ENDPOINTS ---
+  app.post('/api/sync/push', requireAuth, requireRoles(['admin']), async (req: AuthedRequest, res) => {
     const incoming = req.body || {};
     const result = await withDb((db) => {
       mergeStateIntoDb(db, incoming);
-      const user = resolveUser(db, req);
-      return { status: 200, state: statePayload(db, user) };
+      return { status: 200, state: statePayload(db, req.user || null) };
     });
     res.json({ success: true, message: 'تم مزامنة وحفظ البيانات بنجاح.', ...result.state });
   });

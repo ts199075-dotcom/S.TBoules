@@ -103,6 +103,7 @@ export const ServantDashboard: React.FC = () => {
     versesCount: number;
     hasAttachment: boolean;
   } | null>(null);
+  const [qrNoticeMsg, setQrNoticeMsg] = useState<string | null>(null);
 
   const handleAddWorkbenchVerse = () => {
     setWorkbenchVerses((prev) => [
@@ -455,7 +456,6 @@ export const ServantDashboard: React.FC = () => {
         objective: workbenchObjective,
         date: workbenchDate,
         servantName: currentUser?.name || 'خادم الفصل',
-        qrSecretCode: existingSession?.qrSecretCode || `STPAUL-${book.id.slice(0, 3).toUpperCase()}-${workbenchSessionNumber}`,
         qrActive: true,
         maxScorePerMetric: 10,
         memoryVerse: workbenchVerses.find((v) => v.verse.trim())?.verse || workbenchMemoryVerse,
@@ -818,24 +818,13 @@ export const ServantDashboard: React.FC = () => {
                   const existing = sessions.find(
                     (s) => s.classId === servantClassId && (s.termId || currentTermId) === currentTermId && s.sessionNumber === workbenchSessionNumber
                   );
-                  const sessToQr: BibleSession = existing || {
-                    id: `sess-${servantClassId}-${currentTermId}-${workbenchSessionNumber}`,
-                    title: workbenchTitle,
-                    classId: servantClassId,
-                    termId: currentTermId,
-                    date: workbenchDate,
-                    biblePassage: workbenchChapters,
-                    servantName: currentUser?.name || 'خادم الفصل',
-                    maxScorePerMetric: 10,
-                    qrSecretCode: `STPAUL-${workbenchBookId.slice(0, 3).toUpperCase()}-${workbenchSessionNumber}`,
-                    qrActive: true,
-                    sessionNumber: workbenchSessionNumber,
-                    bookId: workbenchBookId,
-                    bookName: BIBLE_BOOKS.find((b) => b.id === workbenchBookId)?.title || 'سفر مقدس',
-                    coveredChapters: workbenchChapters,
-                    objective: workbenchObjective,
-                  };
-                  setSelectedSessionForQr(sessToQr);
+                  if (!existing) {
+                    setQrNoticeMsg('يرجى حفظ وتثبيت الحصة أولاً لإنشاء كود حضور مشفر وآمن للطلاب.');
+                    setTimeout(() => setQrNoticeMsg(null), 5000);
+                    return;
+                  }
+                  setQrNoticeMsg(null);
+                  setSelectedSessionForQr(existing);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
               >
@@ -843,6 +832,14 @@ export const ServantDashboard: React.FC = () => {
                 <span>فتح باركود QR للحصة {workbenchSessionNumber} 📱</span>
               </button>
             </div>
+            {qrNoticeMsg && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center justify-between">
+                <span>{qrNoticeMsg}</span>
+                <button type="button" onClick={() => setQrNoticeMsg(null)} className="cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {/* 8-Session Tabs Selector (الحصة رقم ١ إلى ٨) */}
             <div className="space-y-2">

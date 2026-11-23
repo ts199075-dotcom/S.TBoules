@@ -95,7 +95,6 @@ export const INITIAL_USERS: UserProfile[] = [
     name: 'أمين الخدمة ومسؤول النظام',
     email: 'ts199075@gmail.com',
     phone: '01000000000',
-    password: '987321987',
     age: 35,
     role: 'admin',
     status: 'active',

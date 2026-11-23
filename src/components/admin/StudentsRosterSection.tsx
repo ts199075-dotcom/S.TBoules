@@ -26,6 +26,8 @@ interface StudentsRosterSectionProps {
   changeStudentClass: (studentId: string, newClassId: ClassId) => void;
   deleteUser: (userId: string) => void;
   approveUser: (userId: string) => void;
+  suspendUser?: (userId: string) => void;
+  reactivateUser?: (userId: string) => void;
   onOpenGrading: (student: UserProfile) => void;
   onOpenCertificate: (student: UserProfile) => void;
   onSelectStudentProfile?: (student: UserProfile) => void;
@@ -40,6 +42,8 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
   changeStudentClass,
   deleteUser,
   approveUser,
+  suspendUser,
+  reactivateUser,
   onOpenGrading,
   onOpenCertificate,
   onSelectStudentProfile,
@@ -47,7 +51,7 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState<ClassId | 'all'>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'active' | 'pending'>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'active' | 'pending' | 'suspended' | 'rejected'>('all');
 
   // Add Student Modal State
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -56,7 +60,6 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
   const [newPhone, setNewPhone] = useState('');
   const [newAge, setNewAge] = useState<number | ''>(14);
   const [newGuardianPhone, setNewGuardianPhone] = useState('');
-  const [newPassword, setNewPassword] = useState('123456');
   const [newConfessionFather, setNewConfessionFather] = useState('أبونا ميخائيل');
   const [addSuccessMsg, setAddSuccessMsg] = useState(false);
 
@@ -94,7 +97,6 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
       classId: newClassId,
       age: Number(newAge) || 14,
       guardianPhone: newGuardianPhone.trim() || undefined,
-      password: newPassword.trim() || '123456',
       confessionFather: newConfessionFather.trim() || undefined,
     });
 
@@ -253,6 +255,8 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
               <option value="all">كافة الحالات</option>
               <option value="active">مفعل فقط ✅</option>
               <option value="pending">قيد المراجعة ⏳</option>
+              <option value="suspended">موقوف ⏸️</option>
+              <option value="rejected">مرفوض ❌</option>
             </select>
           </div>
         </div>
@@ -336,6 +340,14 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             مفعل ✅
                           </span>
+                        ) : student.status === 'suspended' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 font-bold text-[10px]">
+                            موقوف ⏸️
+                          </span>
+                        ) : student.status === 'rejected' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-stone-200 dark:bg-stone-800 text-stone-600 dark:text-stone-400 font-bold text-[10px]">
+                            مرفوض ❌
+                          </span>
                         ) : (
                           <button
                             onClick={() => approveUser(student.id)}
@@ -385,6 +397,28 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
                           >
                             <Award className="w-3.5 h-3.5" />
                           </button>
+
+                          {student.status === 'active' && suspendUser && (
+                            <button
+                              type="button"
+                              onClick={() => suspendUser(student.id)}
+                              className="p-1.5 rounded-lg border border-amber-200 dark:border-amber-900/60 hover:bg-amber-600 hover:text-white text-amber-700 dark:text-amber-400 font-bold transition-colors cursor-pointer shadow-2xs"
+                              title="إيقاف مؤقت للحساب"
+                            >
+                              <Shield className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {student.status === 'suspended' && reactivateUser && (
+                            <button
+                              type="button"
+                              onClick={() => reactivateUser(student.id)}
+                              className="p-1.5 rounded-lg border border-emerald-200 dark:border-emerald-900/60 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 font-bold transition-colors cursor-pointer shadow-2xs"
+                              title="إعادة تفعيل الحساب"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           {/* Delete Student Button */}
                           <button
@@ -512,32 +546,16 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
-                    كلمة المرور للحساب:
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-mono text-left"
-                    dir="ltr"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
-                    أب الاعتراف:
-                  </label>
-                  <input
-                    type="text"
-                    value={newConfessionFather}
-                    onChange={(e) => setNewConfessionFather(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  أب الاعتراف:
+                </label>
+                <input
+                  type="text"
+                  value={newConfessionFather}
+                  onChange={(e) => setNewConfessionFather(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                />
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100 dark:border-stone-800">

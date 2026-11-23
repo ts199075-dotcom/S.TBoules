@@ -46,6 +46,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     toggleTheme,
     lessonPosts,
     backendStatus,
+    firebaseUser,
+    firebaseConnected,
+    firebaseSyncing,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -122,20 +125,40 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-2 text-[11px] text-stone-400">
             <span
               className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
-                backendStatus === 'online'
+                firebaseUser
                   ? 'border-emerald-700/60 text-emerald-300'
-                  : backendStatus === 'connecting'
-                    ? 'border-amber-700/60 text-amber-300'
-                    : 'border-stone-600 text-stone-400'
+                  : firebaseConnected && backendStatus === 'online'
+                    ? 'border-emerald-700/60 text-emerald-300'
+                    : backendStatus === 'connecting'
+                      ? 'border-amber-700/60 text-amber-300'
+                      : 'border-stone-600 text-stone-400'
               }`}
-              title={backendStatus === 'online' ? 'الخادم متصل' : 'وضع محلي'}
+              title={
+                firebaseUser
+                  ? 'متصل بقاعدة بيانات Firebase السحابية'
+                  : backendStatus === 'online'
+                    ? 'الخادم متصل'
+                    : 'وضع محلي'
+              }
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  backendStatus === 'online' ? 'bg-emerald-400' : backendStatus === 'connecting' ? 'bg-amber-400' : 'bg-stone-500'
+                  firebaseSyncing
+                    ? 'bg-amber-400 animate-pulse'
+                    : firebaseUser || backendStatus === 'online'
+                      ? 'bg-emerald-400'
+                      : backendStatus === 'connecting'
+                        ? 'bg-amber-400'
+                        : 'bg-stone-500'
                 }`}
               />
-              {backendStatus === 'online' ? 'الخادم متصل' : backendStatus === 'connecting' ? 'جارٍ الاتصال' : 'وضع محلي'}
+              {firebaseSyncing
+                ? 'جاري مزامنة Firebase'
+                : firebaseUser
+                  ? 'Firebase متصل'
+                  : backendStatus === 'online'
+                    ? 'الخادم متصل'
+                    : 'وضع محلي'}
             </span>
             {currentUser ? (
               <div className="flex items-center gap-1">
@@ -204,7 +227,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {currentUser?.role === 'servant' && (
+          {(currentUser?.role === 'servant' || currentUser?.role === 'assistant') && (
             <button
               onClick={() => setCurrentTab('servant')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -359,7 +382,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {currentUser.name.split(' ')[0]}
                     </div>
                     <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
-                      {isAdmin ? 'مسؤول النظام' : currentUser.role === 'servant' ? 'خادم' : 'مخدوم'}
+                      {isAdmin ? 'مسؤول النظام' : currentUser.role === 'assistant' ? 'مساعد إدارة' : currentUser.role === 'servant' ? 'خادم' : 'مخدوم'}
                     </div>
                   </div>
                   <ChevronDown className="w-3 h-3 text-stone-400 hidden sm:block shrink-0" />
@@ -383,7 +406,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <p className="text-[11px] text-stone-500 font-mono" dir="ltr">{currentUser.email || currentUser.phone}</p>
                         <div className="mt-1">
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
-                            {currentUser.status === 'active' ? 'حساب مفعل ✅' : 'قيد المراجعة ⏳'}
+                            {currentUser.status === 'active'
+                              ? 'حساب مفعل ✅'
+                              : currentUser.status === 'suspended'
+                              ? 'حساب موقوف ⏸️'
+                              : currentUser.status === 'rejected'
+                              ? 'طلب مرفوض ❌'
+                              : 'قيد المراجعة ⏳'}
                           </span>
                         </div>
                       </div>
@@ -402,7 +431,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           </button>
                         )}
 
-                        {currentUser.role === 'servant' && (
+                        {(currentUser.role === 'servant' || currentUser.role === 'assistant') && (
                           <button
                             onClick={() => {
                               setCurrentTab('servant');
@@ -528,7 +557,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {currentUser?.role === 'servant' && (
+          {(currentUser?.role === 'servant' || currentUser?.role === 'assistant') && (
             <button
               onClick={() => {
                 setCurrentTab('servant');
@@ -579,7 +608,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <p className="text-[11px] text-stone-500 font-mono" dir="ltr">{currentUser.email || currentUser.phone}</p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300">
-                  {isAdmin ? '👑 مسؤول النظام' : currentUser.role === 'servant' ? '✝️ خادم' : '📖 مخدوم'}
+                  {isAdmin ? '👑 مسؤول النظام' : currentUser.role === 'assistant' ? '🛡️ مساعد إدارة' : currentUser.role === 'servant' ? '✝️ خادم' : '📖 مخدوم'}
                 </span>
               </div>
               <button

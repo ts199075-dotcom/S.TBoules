@@ -1,0 +1,407 @@
+{
+  "entities": {
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Private user account and PII record stored in /users/{userId}. Only accessible by the owner or verified admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "email": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "minLength": 4, "maxLength": 30 },
+        "age": { "type": "number" },
+        "role": { "type": "string", "enum": ["admin", "assistant", "servant", "student"] },
+        "requestedRole": { "type": "string", "enum": ["student", "servant"] },
+        "status": { "type": "string", "enum": ["active", "pending", "rejected", "suspended"] },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "guardianPhone": { "type": "string", "maxLength": 30 },
+        "confessionFather": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 300 },
+        "avatar": { "type": "string", "maxLength": 500 },
+        "registeredAt": { "type": "string", "maxLength": 40 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "mergedIntoUid": { "type": "string", "maxLength": 128 },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uid", "name", "phone", "age", "role", "status", "registeredAt", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Non-PII directory profile for class rosters, leaderboards, and attendance sheets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "role": { "type": "string", "enum": ["admin", "assistant", "servant", "student"] },
+        "status": { "type": "string", "enum": ["active", "pending", "rejected", "suspended"] },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "age": { "type": "number" },
+        "registeredAt": { "type": "string", "maxLength": 40 },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uid", "name", "role", "status", "age", "registeredAt", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Authoritative admin membership marker.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 200 },
+        "serverCreatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "serverCreatedAt"]
+    },
+    "AcademicTerm": {
+      "title": "AcademicTerm",
+      "description": "School semester definition.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "bookSubject": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "sessionsCount": { "type": "number" },
+        "isCurrent": { "type": "boolean" },
+        "startDate": { "type": "string", "maxLength": 40 },
+        "endDate": { "type": "string", "maxLength": 40 },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "bookSubject", "sessionsCount", "isCurrent", "createdByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "ClassAssignedBook": {
+      "title": "ClassAssignedBook",
+      "description": "Biblical book assigned to a class per term.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "bookId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "bookName": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "testament": { "type": "string", "enum": ["old", "new"] },
+        "termId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "assignedByServantName": { "type": "string", "maxLength": 150 },
+        "assignedAt": { "type": "string", "maxLength": 40 },
+        "targetSessionsCount": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "customOverview": { "type": "string", "maxLength": 3000 },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "classId", "bookId", "bookName", "testament", "termId", "updatedByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "BibleSession": {
+      "title": "BibleSession",
+      "description": "Class Bible study session with optional curriculum handout and QR code.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "termId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "biblePassage": { "type": "string", "maxLength": 300 },
+        "servantName": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "maxScorePerMetric": { "type": "number" },
+        "qrSecretCode": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "qrActive": { "type": "boolean" },
+        "expiresAtMs": { "type": "number" },
+        "sessionNumber": { "type": "number" },
+        "bookId": { "type": "string", "maxLength": 128 },
+        "bookName": { "type": "string", "maxLength": 150 },
+        "testament": { "type": "string", "enum": ["old", "new"] },
+        "coveredChapters": { "type": "string", "maxLength": 200 },
+        "objective": { "type": "string", "maxLength": 1000 },
+        "memoryVerse": { "type": "string", "maxLength": 1000 },
+        "memoryVerseRef": { "type": "string", "maxLength": 200 },
+        "memoryVerses": { "type": "array" },
+        "lessonSummary": { "type": "string", "maxLength": 5000 },
+        "attachmentName": { "type": "string", "maxLength": 255 },
+        "fileData": { "type": "string", "maxLength": 750000 },
+        "fileType": { "type": "string", "maxLength": 100 },
+        "fileSize": { "type": "string", "maxLength": 40 },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "classId", "date", "servantName", "maxScorePerMetric", "qrActive", "createdByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "SessionQrSecret": {
+      "title": "SessionQrSecret",
+      "description": "Isolated QR attendance secret and expiration timestamp; restricted to admins and class servants.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "qrSecretCode": { "type": "string", "minLength": 4, "maxLength": 128 },
+        "qrActive": { "type": "boolean" },
+        "expiresAtMs": { "type": "number" },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "classId", "qrSecretCode", "qrActive", "expiresAtMs", "updatedByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "SessionGrade": {
+      "title": "SessionGrade",
+      "description": "Student evaluation and attendance record for a session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sessionTitle": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "date": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "termId": { "type": "string", "maxLength": 128 },
+        "exam": { "type": "number" },
+        "homework": { "type": "number" },
+        "attendance": { "type": "number" },
+        "participation": { "type": "number" },
+        "prayer": { "type": "number" },
+        "tools": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "qrAttendedAt": { "type": "string", "maxLength": 60 },
+        "submittedQrCode": { "type": "string", "maxLength": 128 },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sessionId", "sessionTitle", "date", "studentId", "exam", "homework", "attendance", "participation", "prayer", "tools", "updatedByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "FinalExamScore": {
+      "title": "FinalExamScore",
+      "description": "Student final exam score out of 40.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "score": { "type": "number" },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "score", "updatedByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "ServantAttendanceSubmission": {
+      "title": "ServantAttendanceSubmission",
+      "description": "Servant preparation check-in or absence excuse submitted to admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "servantId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "servantName": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "servantPhone": { "type": "string", "maxLength": 30 },
+        "meetingDate": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "meetingTitle": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "status": { "type": "string", "enum": ["attending", "absent"] },
+        "absenceReason": { "type": "string", "maxLength": 1000 },
+        "prepTitle": { "type": "string", "maxLength": 200 },
+        "prepBibleVerse": { "type": "string", "maxLength": 300 },
+        "prepAttachmentName": { "type": "string", "maxLength": 255 },
+        "prepAttachmentType": { "type": "string", "enum": ["document", "pdf", "notes", "image"] },
+        "prepAttachmentData": { "type": "string", "maxLength": 750000 },
+        "prepNotes": { "type": "string", "maxLength": 3000 },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "submittedAt": { "type": "string", "maxLength": 60 },
+        "viewedByAdmin": { "type": "boolean" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "servantId", "createdByUid", "servantName", "meetingDate", "meetingTitle", "status", "submittedAt", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "ServantLessonPost": {
+      "title": "ServantLessonPost",
+      "description": "Educational handout, announcement, or quiz posted by servants or admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "servantId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "servantName": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "enum": ["lesson_handout", "bible_study", "quiz", "announcement"] },
+        "bibleVerse": { "type": "string", "maxLength": 1000 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 8000 },
+        "attachmentName": { "type": "string", "maxLength": 255 },
+        "attachmentUrl": { "type": "string", "maxLength": 1000 },
+        "fileData": { "type": "string", "maxLength": 750000 },
+        "fileType": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "enum": ["pending_approval", "approved", "rejected"] },
+        "rejectionReason": { "type": "string", "maxLength": 1000 },
+        "approvedBy": { "type": "string", "maxLength": 150 },
+        "approvedAt": { "type": "string", "maxLength": 60 },
+        "targetAudience": { "type": "string", "enum": ["all", "servants_only", "students"] },
+        "targetScope": { "type": "string", "enum": ["all_classes", "specific_class"] },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "servantId", "createdByUid", "servantName", "classId", "title", "category", "content", "createdAt", "status", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "LibraryBook": {
+      "title": "LibraryBook",
+      "description": "Biblical reference book or PDF stored in school library.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "author": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "category": { "type": "string", "enum": ["old_testament", "new_testament", "patristic", "theology_creed", "servant_prep", "church_ritual"] },
+        "description": { "type": "string", "maxLength": 3000 },
+        "targetClassId": { "type": "string", "maxLength": 64 },
+        "downloadUrl": { "type": "string", "maxLength": 1000 },
+        "fileName": { "type": "string", "maxLength": 255 },
+        "fileData": { "type": "string", "maxLength": 750000 },
+        "fileType": { "type": "string", "maxLength": 100 },
+        "fileSize": { "type": "string", "maxLength": 40 },
+        "pageCount": { "type": "number" },
+        "addedBy": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "addedAt": { "type": "string", "maxLength": 60 },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "author", "category", "description", "addedBy", "addedAt", "createdByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "ChurchEvent": {
+      "title": "ChurchEvent",
+      "description": "Church celebration, graduation, trip, or spiritual day.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "date": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "time": { "type": "string", "maxLength": 40 },
+        "location": { "type": "string", "maxLength": 250 },
+        "description": { "type": "string", "maxLength": 3000 },
+        "type": { "type": "string", "enum": ["celebration", "graduation", "spiritual_day", "trip", "meeting", "competition", "general"] },
+        "targetAudience": { "type": "string", "enum": ["all", "students", "servants"] },
+        "targetClassId": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["upcoming", "ongoing", "completed"] },
+        "createdBy": { "type": "string", "maxLength": 150 },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "date", "description", "type", "targetAudience", "status", "createdAt", "createdByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "YearWorkLock": {
+      "title": "YearWorkLock",
+      "description": "Per-class year work calculation approval lock.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string", "enum": ["primary_4", "primary_5", "primary_6", "prep_1", "prep_2_3", "secondary", "adults"] },
+        "locked": { "type": "boolean" },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "locked", "updatedByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "In-app notification targeted to specific user or role.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "timestamp": { "type": "string", "maxLength": 60 },
+        "type": { "type": "string", "enum": ["prep_upload", "absence", "new_student", "grade_updated", "role_assigned", "qr_attendance", "post_pending", "post_approved"] },
+        "read": { "type": "boolean" },
+        "actionUrl": { "type": "string", "maxLength": 200 },
+        "audienceUserId": { "type": "string", "maxLength": 128 },
+        "audienceRoles": { "type": "array" },
+        "createdByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serverCreatedAt": { "type": "string", "format": "date-time" },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "message", "timestamp", "type", "read", "createdByUid", "serverCreatedAt", "serverUpdatedAt"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Lightweight Firestore health check document.",
+      "type": "object",
+      "properties": {
+        "ok": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPrivate" },
+      "description": "Private user PII accounts; restricted to owner or admin."
+    },
+    "/public_profiles/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Non-PII directory profiles for active members."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMarker" },
+      "description": "Authoritative admin role markers."
+    },
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/ConnectionTest" },
+      "description": "Startup Firestore server connection verification."
+    },
+    "/academic_terms/{termId}": {
+      "schema": { "$ref": "#/entities/AcademicTerm" },
+      "description": "School academic semesters."
+    },
+    "/class_assigned_books/{docId}": {
+      "schema": { "$ref": "#/entities/ClassAssignedBook" },
+      "description": "Biblical book assignments per class and term."
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/BibleSession" },
+      "description": "Bible study sessions and curriculum material (QR secret stored separately)."
+    },
+    "/session_qr_secrets/{sessionId}": {
+      "schema": { "$ref": "#/entities/SessionQrSecret" },
+      "description": "Isolated QR attendance secrets accessible only to admins and class servants."
+    },
+    "/grades/{gradeId}": {
+      "schema": { "$ref": "#/entities/SessionGrade" },
+      "description": "Student session scores and QR attendance."
+    },
+    "/final_exams/{studentId}": {
+      "schema": { "$ref": "#/entities/FinalExamScore" },
+      "description": "Final exam scores per student."
+    },
+    "/servant_submissions/{subId}": {
+      "schema": { "$ref": "#/entities/ServantAttendanceSubmission" },
+      "description": "Servant weekly preparation and attendance check-ins."
+    },
+    "/lesson_posts/{postId}": {
+      "schema": { "$ref": "#/entities/ServantLessonPost" },
+      "description": "Educational posts and handouts requiring admin approval."
+    },
+    "/library_books/{bookId}": {
+      "schema": { "$ref": "#/entities/LibraryBook" },
+      "description": "School digital reference library."
+    },
+    "/church_events/{eventId}": {
+      "schema": { "$ref": "#/entities/ChurchEvent" },
+      "description": "Church events, graduations, and celebrations."
+    },
+    "/year_work_locks/{classId}": {
+      "schema": { "$ref": "#/entities/YearWorkLock" },
+      "description": "Per-class year work calculation approval state."
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "Role- and user-targeted notifications."
+    }
+  }
+}

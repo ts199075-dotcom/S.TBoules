@@ -182,23 +182,12 @@ export const StudentDashboard: React.FC = () => {
   // Determine if this book/term is fully completed (all 8 sessions graded + final exam recorded)
   const isTermFullyCompleted = summary.gradedSessionsCount >= 8 && summary.finalExamScore > 0;
 
-  // Active session for QR scanning
-  const activeQrSession: BibleSession = useMemo(() => {
+  // Active session for QR scanning (only real published sessions)
+  const activeQrSession: BibleSession | null = useMemo(() => {
     if (termSessions.length > 0) return termSessions[termSessions.length - 1];
     if (classSessions.length > 0) return classSessions[classSessions.length - 1];
-    return {
-      id: `sess-${selectedBook.id}-1`,
-      title: `اللقاء الأسبوعي: دراسة ${selectedBook.title}`,
-      classId: currentUser.classId || 'primary_4',
-      termId: selectedTermId,
-      date: new Date().toISOString().split('T')[0],
-      biblePassage: selectedBook.title,
-      servantName: 'أمانة الخدمة',
-      maxScorePerMetric: 10,
-      qrSecretCode: `STPAUL-${selectedBook.id.slice(0, 4).toUpperCase()}-101`,
-      qrActive: true,
-    };
-  }, [termSessions, classSessions, selectedBook, currentUser.classId, selectedTermId]);
+    return null;
+  }, [termSessions, classSessions]);
 
   // Approved posts targeted for this student's class
   const classApprovedPosts = lessonPosts.filter((p) => {
@@ -270,14 +259,17 @@ export const StudentDashboard: React.FC = () => {
     const newTermNumber = academicTerms.length + 1;
     const termTitle = `الترم ${newTermNumber === 2 ? 'الثاني' : newTermNumber === 3 ? 'الثالث' : newTermNumber === 4 ? 'الرابع' : `رقم ${newTermNumber}`}`;
 
-    const created = await addAcademicTerm({
-      title: termTitle,
-      bookSubject: nextBook.title,
-      description: `دراسة متعمقة في ${nextBook.title} - (${nextBook.theme})`,
-      sessionsCount: 8,
-      isCurrent: true,
-      startDate: new Date().toISOString().split('T')[0],
-    });
+    const created =
+      currentUser.role === 'admin'
+        ? await addAcademicTerm({
+            title: termTitle,
+            bookSubject: nextBook.title,
+            description: `دراسة متعمقة في ${nextBook.title} - (${nextBook.theme})`,
+            sessionsCount: 8,
+            isCurrent: true,
+            startDate: new Date().toISOString().split('T')[0],
+          })
+        : null;
 
     setSelectedBook(nextBook);
     if (created?.id) setSelectedTermId(created.id);
@@ -323,12 +315,13 @@ export const StudentDashboard: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setQrModalSession(activeQrSession)}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
-            title="فتح كاميرا الهاتف وتسجيل الحضور بالباركود"
+            disabled={!activeQrSession}
+            onClick={() => activeQrSession && setQrModalSession(activeQrSession)}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+            title={activeQrSession ? 'فتح كاميرا الهاتف وتسجيل الحضور بالباركود' : 'لا يوجد لقاء مفتوح حالياً لفصلك'}
           >
             <QrCode className="w-4 h-4 text-emerald-200" />
-            <span>تسجيل حضوري بـ QR Code</span>
+            <span>{activeQrSession ? 'تسجيل حضوري بـ QR Code' : 'لا يوجد لقاء مفتوح'}</span>
           </button>
 
           <button

@@ -109,7 +109,7 @@ export const MasterMenuDrawer: React.FC<MasterMenuDrawerProps> = ({
                 </div>
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
-                {isAdmin ? '👑 مسؤول النظام' : currentUser.role === 'servant' ? '✝️ خادم' : '📖 مخدوم'}
+                {isAdmin ? '👑 مسؤول النظام' : currentUser.role === 'assistant' ? '🛡️ مساعد إدارة' : currentUser.role === 'servant' ? '✝️ خادم' : '📖 مخدوم'}
               </span>
             </div>
           )}
