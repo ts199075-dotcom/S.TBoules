@@ -1,5 +1,4 @@
 import React from 'react';
-import { getQuotaUpgradeUrl } from '../firebase';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -51,19 +50,11 @@ export class ErrorBoundary extends React.Component<
             <h2 className="text-xl font-black">مدرسة القديس بولس للكتاب المقدس</h2>
             {isQuota ? (
               <div className="space-y-2 text-sm text-rose-700 dark:text-rose-300 leading-relaxed">
-                <p>تم الوصول إلى الحد اليومي المجاني لعمليات القراءة في Firebase Firestore. سيتم تجديد الحصة غداً أو يمكنك الترقية من لوحة تحكم Firebase.</p>
-                <a
-                  href={getQuotaUpgradeUrl()}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block text-xs underline text-amber-700 dark:text-amber-400"
-                >
-                  فتح إعدادات قاعدة البيانات في Firebase Console
-                </a>
+                <p>تم الوصول إلى الحد اليومي لقراءة البيانات مؤقتاً. يرجى المحاولة لاحقاً أو التواصل مع أمين الخدمة.</p>
               </div>
             ) : (
               <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
-                حدث تحديث في الجلسة أو تعذر إتمام العملية السحابية. يمكنك العودة للصفحة الرئيسية الآن.
+                حدث تحديث في الجلسة أو تعذر إتمام العملية حالياً. يمكنك العودة للصفحة الرئيسية الآن.
               </p>
             )}
             <button

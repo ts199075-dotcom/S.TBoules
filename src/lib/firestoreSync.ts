@@ -117,6 +117,22 @@ export function isVerifiedAdminEmail(email?: string | null, emailVerified?: bool
   );
 }
 
+export function isPasswordProviderUser(
+  fbUser: { providerData?: Array<{ providerId?: string | null }> } | null | undefined
+): boolean {
+  return Boolean(fbUser?.providerData?.some((p) => p?.providerId === 'password'));
+}
+
+export function isPermittedAuthUser(
+  fbUser:
+    | { emailVerified?: boolean; providerData?: Array<{ providerId?: string | null }> }
+    | null
+    | undefined
+): boolean {
+  if (!fbUser) return false;
+  return Boolean(fbUser.emailVerified || isPasswordProviderUser(fbUser));
+}
+
 export async function checkIsAdminMarker(uid: string): Promise<boolean> {
   if (!uid) return false;
   const docId = sanitizeFirestoreId(uid);
@@ -287,6 +303,141 @@ export async function upsertUserToFirestore(user: UserProfile, docUidOverride?: 
     classId: publicProfile.classId,
     age: publicProfile.age,
   });
+}
+
+export async function registerPendingUserToFirestore(
+  user: UserProfile,
+  docUidOverride?: string
+): Promise<void> {
+  const docId = sanitizeFirestoreId(docUidOverride || user.id);
+  const authUser = auth.currentUser;
+  if (!authUser || sanitizeFirestoreId(authUser.uid) !== docId) {
+    throw new Error('AUTH_UID_MISMATCH');
+  }
+  if (!isPermittedAuthUser(authUser)) {
+    throw new Error('UNVERIFIED_EMAIL');
+  }
+
+  const classId = normalizeClassId(user.classId);
+  if (!classId) {
+    throw new Error('INVALID_CLASS_ID');
+  }
+
+  const requestedRole = user.requestedRole === 'servant' ? 'servant' : 'student';
+  const cleanName = clampStr(user.name?.trim(), 150) || 'عضو جديد';
+  const cleanPhone = clampStr(user.phone?.trim(), 30) || '01000000000';
+  const cleanAge = Math.min(120, Math.max(5, Number(user.age || 14)));
+  const cleanRegisteredAt =
+    clampStr(user.registeredAt, 40) || new Date().toISOString().split('T')[0];
+
+  const fullPrivate = {
+    id: docId,
+    uid: docId,
+    name: cleanName,
+    email: clampStr(user.email?.trim(), 200),
+    phone: cleanPhone,
+    age: cleanAge,
+    role: 'student' as const,
+    requestedRole,
+    status: 'pending' as const,
+    classId,
+    guardianPhone: clampStr(user.guardianPhone?.trim(), 30),
+    confessionFather: clampStr(user.confessionFather?.trim(), 150),
+    address: clampStr(user.address?.trim(), 300),
+    avatar: clampStr(user.avatar?.trim(), 500),
+    registeredAt: cleanRegisteredAt,
+    notes: clampStr(user.notes?.trim(), 1000),
+  };
+
+  const publicProfile = {
+    id: docId,
+    uid: docId,
+    name: cleanName,
+    role: 'student' as const,
+    status: 'pending' as const,
+    classId,
+    age: cleanAge,
+    registeredAt: cleanRegisteredAt,
+  };
+
+  const userRef = doc(db, COLLECTIONS.USERS, docId);
+  const pubRef = doc(db, COLLECTIONS.PUBLIC_PROFILES, docId);
+  const path = `${COLLECTIONS.USERS}/${docId}`;
+
+  try {
+    const [userSnap, pubSnap] = await Promise.all([getDoc(userRef), getDoc(pubRef)]);
+    const batch = writeBatch(db);
+
+    if (userSnap.exists()) {
+      const existing = userSnap.data() as Record<string, any>;
+      if (existing.status === 'active') {
+        throw new Error('ACCOUNT_ALREADY_ACTIVE');
+      }
+      if (existing.status === 'rejected') {
+        throw new Error('ACCOUNT_REJECTED');
+      }
+      if (existing.status === 'suspended') {
+        throw new Error('ACCOUNT_SUSPENDED');
+      }
+      // Existing pending document: update only owner-permitted keys per firestore.rules
+      batch.update(
+        userRef,
+        stripUndefined({
+          name: fullPrivate.name,
+          phone: fullPrivate.phone,
+          guardianPhone: fullPrivate.guardianPhone,
+          confessionFather: fullPrivate.confessionFather,
+          address: fullPrivate.address,
+          avatar: fullPrivate.avatar,
+          age: fullPrivate.age,
+          requestedRole: fullPrivate.requestedRole,
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+    } else {
+      batch.set(
+        userRef,
+        stripUndefined({
+          ...fullPrivate,
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+    }
+
+    if (pubSnap.exists()) {
+      const existingPub = pubSnap.data() as Record<string, any>;
+      if (existingPub.status !== 'rejected' && existingPub.status !== 'suspended') {
+        // Update only owner-permitted keys per firestore.rules
+        batch.update(pubRef, {
+          name: publicProfile.name,
+          age: publicProfile.age,
+          serverUpdatedAt: serverTimestamp(),
+        });
+      }
+    } else {
+      batch.set(
+        pubRef,
+        stripUndefined({
+          ...publicProfile,
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+    }
+
+    await batch.commit();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === 'ACCOUNT_ALREADY_ACTIVE' ||
+        error.message === 'ACCOUNT_REJECTED' ||
+        error.message === 'ACCOUNT_SUSPENDED')
+    ) {
+      throw error;
+    }
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
 }
 
 export async function updateOwnProfileToFirestore(

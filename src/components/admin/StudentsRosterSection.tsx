@@ -16,13 +16,19 @@ import {
   Check,
   Shield,
   BookOpen,
+  Mail,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 
 interface StudentsRosterSectionProps {
   users: UserProfile[];
   classes: ClassInfo[];
   grades: SessionGrade[];
-  addStudentByAdmin: (data: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => Promise<UserProfile> | UserProfile;
+  addStudentByAdmin: (
+    data: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'> & { password?: string }
+  ) => Promise<UserProfile> | UserProfile;
   changeStudentClass: (studentId: string, newClassId: ClassId) => void;
   deleteUser: (userId: string) => void;
   approveUser: (userId: string) => void;
@@ -61,7 +67,12 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
   const [newAge, setNewAge] = useState<number | ''>(14);
   const [newGuardianPhone, setNewGuardianPhone] = useState('');
   const [newConfessionFather, setNewConfessionFather] = useState('أبونا ميخائيل');
-  const [addSuccessMsg, setAddSuccessMsg] = useState(false);
+  const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [newStudentPassword, setNewStudentPassword] = useState('');
+  const [showNewStudentPassword, setShowNewStudentPassword] = useState(false);
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addErrorMsg, setAddErrorMsg] = useState('');
+  const [addSuccessMsg, setAddSuccessMsg] = useState<string | false>(false);
 
   // Transfer Student Modal State
   const [transferTargetStudent, setTransferTargetStudent] = useState<UserProfile | null>(null);
@@ -78,7 +89,8 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
     const matchesSearch =
       st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (st.phone && st.phone.includes(searchQuery)) ||
-      (st.guardianPhone && st.guardianPhone.includes(searchQuery));
+      (st.guardianPhone && st.guardianPhone.includes(searchQuery)) ||
+      (st.email && st.email.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesClass = selectedClassFilter === 'all' || st.classId === selectedClassFilter;
     const matchesStatus = selectedStatusFilter === 'all' || st.status === selectedStatusFilter;
     return matchesSearch && matchesClass && matchesStatus;
@@ -87,25 +99,59 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
   const activeCount = allStudents.filter((s) => s.status === 'active').length;
   const pendingCount = allStudents.filter((s) => s.status === 'pending').length;
 
-  const handleCreateStudent = (e: React.FormEvent) => {
+  const generatePlatformEmail = () => {
+    const digits = (newPhone.replace(/\D/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000)));
+    const suffix = Math.random().toString(36).slice(2, 5);
+    setNewStudentEmail(`student.${digits}.${suffix}@stpaul.school`);
+  };
+
+  const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAddErrorMsg('');
     if (!newName.trim() || !newPhone.trim()) return;
 
-    addStudentByAdmin({
-      name: newName.trim(),
-      phone: newPhone.trim(),
-      classId: newClassId,
-      age: Number(newAge) || 14,
-      guardianPhone: newGuardianPhone.trim() || undefined,
-      confessionFather: newConfessionFather.trim() || undefined,
-    });
+    const cleanEmail = newStudentEmail.trim().toLowerCase();
+    const cleanPass = newStudentPassword.trim();
+    if ((cleanEmail && !cleanPass) || (!cleanEmail && cleanPass)) {
+      setAddErrorMsg('عند تعيين حساب دخول للطالب، يرجى إدخال البريد الإلكتروني وكلمة المرور معاً.');
+      return;
+    }
+    if (cleanPass && cleanPass.length < 6) {
+      setAddErrorMsg('يجب أن تتكون كلمة المرور من ٦ أحرف أو أرقام على الأقل.');
+      return;
+    }
 
-    setNewName('');
-    setNewPhone('');
-    setNewGuardianPhone('');
-    setAddModalOpen(false);
-    setAddSuccessMsg(true);
-    setTimeout(() => setAddSuccessMsg(false), 4000);
+    setAddSubmitting(true);
+    try {
+      await addStudentByAdmin({
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        classId: newClassId,
+        age: Number(newAge) || 14,
+        guardianPhone: newGuardianPhone.trim() || undefined,
+        confessionFather: newConfessionFather.trim() || undefined,
+        email: cleanEmail || undefined,
+        password: cleanPass || undefined,
+      });
+
+      setNewName('');
+      setNewPhone('');
+      setNewGuardianPhone('');
+      setNewStudentEmail('');
+      setNewStudentPassword('');
+      setShowNewStudentPassword(false);
+      setAddModalOpen(false);
+      setAddSuccessMsg(
+        cleanEmail
+          ? `تمت إضافة الطالب وتفعيل حساب دخوله (${cleanEmail}) بنجاح! ✅`
+          : 'تمت إضافة الطالب الجديد بنجاح، وتفعيله فوراً على قاعدة البيانات المركزية! ✅'
+      );
+      setTimeout(() => setAddSuccessMsg(false), 6000);
+    } catch (err) {
+      setAddErrorMsg(err instanceof Error ? err.message : 'تعذر إضافة الطالب، يرجى المحاولة مرة أخرى.');
+    } finally {
+      setAddSubmitting(false);
+    }
   };
 
   const handleConfirmTransfer = (e: React.FormEvent) => {
@@ -207,7 +253,7 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
         {addSuccessMsg && (
           <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>تمت إضافة الطالب الجديد بنجاح، وتفعيله فوراً على قاعدة البيانات المركزية! ✅</span>
+            <span>{addSuccessMsg}</span>
           </div>
         )}
 
@@ -558,6 +604,70 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
                 />
               </div>
 
+              <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200 dark:border-stone-700 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-stone-800 dark:text-stone-200 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-amber-600" />
+                    بيانات دخول الطالب للمنصة (اختياري)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={generatePlatformEmail}
+                    className="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 font-bold text-[10px] hover:bg-amber-200 dark:hover:bg-amber-900 cursor-pointer"
+                  >
+                    توليد بريد تلقائي
+                  </button>
+                </div>
+                <p className="text-[10px] text-stone-500 dark:text-stone-400">
+                  للأطفال الذين لا يملكون بريد جوجل: أنشئ لهم بريداً خاصاً بالمنصة (مثل <span dir="ltr" className="font-mono">name@stpaul.school</span>) وكلمة مرور للدخول مباشرة.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                      البريد الإلكتروني على المنصة
+                    </label>
+                    <input
+                      type="email"
+                      dir="ltr"
+                      placeholder="student@stpaul.school"
+                      value={newStudentEmail}
+                      onChange={(e) => setNewStudentEmail(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-mono text-left"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                      كلمة المرور (٦+ أحرف)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewStudentPassword ? 'text' : 'password'}
+                        dir="ltr"
+                        placeholder="••••••"
+                        value={newStudentPassword}
+                        onChange={(e) => setNewStudentPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-8 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-mono text-left"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewStudentPassword((prev) => !prev)}
+                        className="absolute right-2.5 top-2 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 cursor-pointer"
+                      >
+                        {showNewStudentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {addErrorMsg && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{addErrorMsg}</span>
+                </div>
+              )}
+
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100 dark:border-stone-800">
                 <button
                   type="button"
@@ -568,10 +678,11 @@ export const StudentsRosterSection: React.FC<StudentsRosterSectionProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  disabled={addSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                 >
                   <Check className="w-4 h-4" />
-                  <span>إضافة وتفعيل الطالب فوراً ✅</span>
+                  <span>{addSubmitting ? 'جاري الحفظ...' : 'إضافة وتفعيل الطالب فوراً ✅'}</span>
                 </button>
               </div>
             </form>

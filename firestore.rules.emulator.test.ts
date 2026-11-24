@@ -34,6 +34,7 @@ import {
   deleteDoc,
   query,
   where,
+  writeBatch,
   serverTimestamp,
   Timestamp,
   type Firestore,
@@ -1602,6 +1603,419 @@ describe('Firestore Security Rules Integration Tests (Local Emulator - Named Dat
       await assertFails(getDocs(collection(db, 'library_books')));
       await assertFails(getDocs(collection(db, 'church_events')));
       await assertFails(getDocs(collection(db, 'academic_terms')));
+    });
+  });
+
+  describe('G. School Join Request Lifecycle (Registration, Isolation & Admin Approval)', () => {
+    it('allows verified new user to submit atomic student/servant join requests as pending without elevated privileges', async () => {
+      const studentUid = 'join_student_uid';
+      const studentDb = authDb(studentUid, {
+        email: 'join.student@example.com',
+        email_verified: true,
+      });
+
+      const batch1 = writeBatch(studentDb);
+      batch1.set(doc(studentDb, 'users', studentUid), {
+        id: studentUid,
+        uid: studentUid,
+        name: 'مينا جرجس',
+        email: 'join.student@example.com',
+        phone: '01234567890',
+        age: 13,
+        role: 'student',
+        requestedRole: 'student',
+        status: 'pending',
+        classId: 'prep_2_3',
+        guardianPhone: '01098765432',
+        confessionFather: 'أبونا كيرلس',
+        avatar: 'https://lh3.googleusercontent.com/a/example',
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      batch1.set(doc(studentDb, 'public_profiles', studentUid), {
+        id: studentUid,
+        uid: studentUid,
+        name: 'مينا جرجس',
+        role: 'student',
+        status: 'pending',
+        classId: 'prep_2_3',
+        age: 13,
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(batch1.commit());
+
+      const createdSnap = await assertSucceeds(getDoc(doc(studentDb, 'users', studentUid)));
+      expect(createdSnap.data()?.status).toBe('pending');
+      expect(createdSnap.data()?.role).toBe('student');
+      expect(createdSnap.data()?.requestedRole).toBe('student');
+
+      // Servant join request still registers as role='student', status='pending', requestedRole='servant'
+      const servantUid = 'join_servant_uid';
+      const servantDb = authDb(servantUid, {
+        email: 'join.servant@example.com',
+        email_verified: true,
+      });
+      const batch2 = writeBatch(servantDb);
+      batch2.set(doc(servantDb, 'users', servantUid), {
+        id: servantUid,
+        uid: servantUid,
+        name: 'مارك يوسف',
+        email: 'join.servant@example.com',
+        phone: '01122334455',
+        age: 23,
+        role: 'student',
+        requestedRole: 'servant',
+        status: 'pending',
+        classId: 'primary_5',
+        registeredAt: '2026-11-24',
+        notes: 'طلب انضمام كخادم',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      batch2.set(doc(servantDb, 'public_profiles', servantUid), {
+        id: servantUid,
+        uid: servantUid,
+        name: 'مارك يوسف',
+        role: 'student',
+        status: 'pending',
+        classId: 'primary_5',
+        age: 23,
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(batch2.commit());
+
+      const servantSnap = await assertSucceeds(getDoc(doc(servantDb, 'users', servantUid)));
+      expect(servantSnap.data()?.status).toBe('pending');
+      expect(servantSnap.data()?.role).toBe('student');
+      expect(servantSnap.data()?.requestedRole).toBe('servant');
+    });
+
+    it('handles partial/pre-existing pending documents cleanly using owner-permitted update keys only', async () => {
+      const uid = 'partial_retry_uid';
+      const now = Timestamp.now();
+
+      // Pre-seed orphan /public_profiles doc as if an earlier partial attempt left it behind
+      await seedWithRulesDisabled(async (db) => {
+        await setDoc(doc(db, 'public_profiles', uid), {
+          id: uid,
+          uid,
+          name: 'Old Name',
+          role: 'student',
+          status: 'pending',
+          classId: 'primary_4',
+          age: 12,
+          registeredAt: '2026-11-20',
+          serverCreatedAt: now,
+          serverUpdatedAt: now,
+        });
+      });
+
+      const db = authDb(uid, { email: 'retry@example.com', email_verified: true });
+
+      // Creating /users while updating ONLY owner-permitted keys on existing /public_profiles succeeds
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', uid), {
+        id: uid,
+        uid,
+        name: 'Updated Name',
+        email: 'retry@example.com',
+        phone: '01011112222',
+        age: 13,
+        role: 'student',
+        requestedRole: 'student',
+        status: 'pending',
+        classId: 'prep_1',
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, 'public_profiles', uid), {
+        name: 'Updated Name',
+        age: 13,
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(batch.commit());
+
+      // Retrying update with forbidden key (e.g. changing classId or role as owner) fails
+      await assertFails(
+        updateDoc(doc(db, 'users', uid), {
+          classId: 'adults',
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+      await assertFails(
+        updateDoc(doc(db, 'public_profiles', uid), {
+          classId: 'adults',
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+    });
+
+    it('rejects invalid join request payloads (unverified email, bad classId, servant/admin role, active status, wrong uid)', async () => {
+      const unverifiedDb = authDb('unverified_uid', {
+        email: 'unverified@example.com',
+        email_verified: false,
+      });
+      await assertFails(
+        setDoc(doc(unverifiedDb, 'users', 'unverified_uid'), {
+          id: 'unverified_uid',
+          uid: 'unverified_uid',
+          name: 'Unverified User',
+          phone: '01012345678',
+          age: 14,
+          role: 'student',
+          requestedRole: 'student',
+          status: 'pending',
+          classId: 'primary_4',
+          registeredAt: '2026-11-24',
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+
+      const badPayloadDb = authDb('bad_reg_uid', {
+        email: 'badreg@example.com',
+        email_verified: true,
+      });
+
+      // Invalid classId
+      await assertFails(
+        setDoc(doc(badPayloadDb, 'users', 'bad_reg_uid'), {
+          id: 'bad_reg_uid',
+          uid: 'bad_reg_uid',
+          name: 'Bad Class',
+          phone: '01012345678',
+          age: 14,
+          role: 'student',
+          requestedRole: 'student',
+          status: 'pending',
+          classId: 'unknown_class',
+          registeredAt: '2026-11-24',
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+
+      // Self-assigning role='servant' on create
+      await assertFails(
+        setDoc(doc(badPayloadDb, 'users', 'bad_reg_uid'), {
+          id: 'bad_reg_uid',
+          uid: 'bad_reg_uid',
+          name: 'Sneaky Servant',
+          phone: '01012345678',
+          age: 22,
+          role: 'servant',
+          requestedRole: 'servant',
+          status: 'pending',
+          classId: 'primary_4',
+          registeredAt: '2026-11-24',
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+
+      // Writing under another user's UID
+      await assertFails(
+        setDoc(doc(badPayloadDb, 'users', 'someone_else_uid'), {
+          id: 'someone_else_uid',
+          uid: 'someone_else_uid',
+          name: 'Spoofed UID',
+          phone: '01012345678',
+          age: 14,
+          role: 'student',
+          requestedRole: 'student',
+          status: 'pending',
+          classId: 'primary_4',
+          registeredAt: '2026-11-24',
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+    });
+
+    it('keeps newly registered user strictly pending, blocks school access/self-approval, and allows only admin approval', async () => {
+      const uid = 'pending_lifecycle_uid';
+      const userDb = authDb(uid, { email: 'lifecycle@example.com', email_verified: true });
+
+      const regBatch = writeBatch(userDb);
+      regBatch.set(doc(userDb, 'users', uid), {
+        id: uid,
+        uid,
+        name: 'بيشوي عماد',
+        email: 'lifecycle@example.com',
+        phone: '01200011223',
+        age: 24,
+        role: 'student',
+        requestedRole: 'servant',
+        status: 'pending',
+        classId: 'primary_4',
+        registeredAt: '2026-11-24',
+        notes: 'طلب انضمام كخادم',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      regBatch.set(doc(userDb, 'public_profiles', uid), {
+        id: uid,
+        uid,
+        name: 'بيشوي عماد',
+        role: 'student',
+        status: 'pending',
+        classId: 'primary_4',
+        age: 24,
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(regBatch.commit());
+
+      // Pending user cannot read protected collections, create notifications, or self-approve
+      await assertFails(getDocs(query(collection(userDb, 'sessions'), where('classId', '==', 'primary_4'))));
+      await assertFails(
+        setDoc(doc(userDb, 'notifications', `notif-reg-${uid}`), {
+          id: `notif-reg-${uid}`,
+          title: 'طلب جديد',
+          message: 'طلب انضمام',
+          timestamp: 'الآن',
+          type: 'new_student',
+          read: false,
+          audienceRoles: ['admin'],
+          createdByUid: uid,
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+      await assertFails(
+        updateDoc(doc(userDb, 'users', uid), {
+          status: 'active',
+          role: 'servant',
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+
+      // Non-admins (servant / assistant) cannot approve the pending user
+      const servantDb = authDb('servant_p4', { email: 'serv4@example.com', email_verified: true });
+      const assistantDb = authDb('assistant_uid', { email: 'assistant@example.com', email_verified: true });
+      await assertFails(
+        updateDoc(doc(servantDb, 'users', uid), {
+          status: 'active',
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+      await assertFails(
+        updateDoc(doc(assistantDb, 'users', uid), {
+          status: 'active',
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
+
+      // Only verified Admin can approve and grant requestedRole='servant'
+      const adminDb = authDb('admin_uid', { email: ADMIN_EMAIL, email_verified: true });
+      const approveBatch = writeBatch(adminDb);
+      approveBatch.update(doc(adminDb, 'users', uid), {
+        status: 'active',
+        role: 'servant',
+        serverUpdatedAt: serverTimestamp(),
+      });
+      approveBatch.update(doc(adminDb, 'public_profiles', uid), {
+        status: 'active',
+        role: 'servant',
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(approveBatch.commit());
+
+      const approvedDoc = await assertSucceeds(getDoc(doc(userDb, 'users', uid)));
+      expect(approvedDoc.data()?.status).toBe('active');
+      expect(approvedDoc.data()?.role).toBe('servant');
+
+      // Now approved servant can read own class sessions
+      await assertSucceeds(getDocs(query(collection(userDb, 'sessions'), where('classId', '==', 'primary_4'))));
+    });
+
+    it('allows Email/Password accounts (without email_verified) to register as pending, await admin approval, and blocks admin spoofing', async () => {
+      const kidUid = 'kid_password_uid';
+      const kidDb = authDb(kidUid, {
+        email: 'mina.kid@stpaul.school',
+        email_verified: false,
+        firebase: { sign_in_provider: 'password' },
+      } as any);
+
+      // Self-register as pending student
+      const regBatch = writeBatch(kidDb);
+      regBatch.set(doc(kidDb, 'users', kidUid), {
+        id: kidUid,
+        uid: kidUid,
+        name: 'مينا سمير',
+        email: 'mina.kid@stpaul.school',
+        phone: '01099887766',
+        age: 10,
+        role: 'student',
+        requestedRole: 'student',
+        status: 'pending',
+        classId: 'primary_4',
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      regBatch.set(doc(kidDb, 'public_profiles', kidUid), {
+        id: kidUid,
+        uid: kidUid,
+        name: 'مينا سمير',
+        role: 'student',
+        status: 'pending',
+        classId: 'primary_4',
+        age: 10,
+        registeredAt: '2026-11-24',
+        serverCreatedAt: serverTimestamp(),
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(regBatch.commit());
+
+      // Blocked from reading sessions while pending
+      await assertFails(getDocs(query(collection(kidDb, 'sessions'), where('classId', '==', 'primary_4'))));
+
+      // Admin approves the child's Email/Password account
+      const adminDb = authDb('admin_uid', { email: ADMIN_EMAIL, email_verified: true });
+      const approveBatch = writeBatch(adminDb);
+      approveBatch.update(doc(adminDb, 'users', kidUid), {
+        status: 'active',
+        serverUpdatedAt: serverTimestamp(),
+      });
+      approveBatch.update(doc(adminDb, 'public_profiles', kidUid), {
+        status: 'active',
+        serverUpdatedAt: serverTimestamp(),
+      });
+      await assertSucceeds(approveBatch.commit());
+
+      // Active student can now read own profile and class sessions
+      await assertSucceeds(getDoc(doc(kidDb, 'users', kidUid)));
+      await assertSucceeds(getDocs(query(collection(kidDb, 'sessions'), where('classId', '==', 'primary_4'))));
+
+      // Adversarial check: an unverified password account claiming ts199075@gmail.com CANNOT become bootstrap admin
+      const spoofedAdminDb = authDb('spoofed_pw_uid', {
+        email: ADMIN_EMAIL,
+        email_verified: false,
+        firebase: { sign_in_provider: 'password' },
+      } as any);
+      await assertFails(
+        setDoc(doc(spoofedAdminDb, 'church_events', 'evt-pw-spoof'), {
+          id: 'evt-pw-spoof',
+          title: 'Spoofed Event',
+          date: '2026-12-01',
+          description: 'Attempted admin bypass via unverified password provider',
+          type: 'celebration',
+          targetAudience: 'all',
+          status: 'upcoming',
+          createdAt: '2026-11-24',
+          createdByUid: 'spoofed_pw_uid',
+          serverCreatedAt: serverTimestamp(),
+          serverUpdatedAt: serverTimestamp(),
+        })
+      );
     });
   });
 });

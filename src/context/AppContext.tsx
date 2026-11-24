@@ -28,6 +28,10 @@ import {
   auth,
   googleProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  createAuthAccountWithoutSigningOut,
   signOut,
   onAuthStateChanged,
   testConnection,
@@ -44,9 +48,11 @@ import {
   ensureAdminMarker,
   fetchUserFromFirestore,
   generateQrSecretCode,
+  isPermittedAuthUser,
   isVerifiedAdminEmail,
   linkLegacyUserToFirebaseUid,
   markNotificationReadInFirestore,
+  registerPendingUserToFirestore,
   removeAdminMarker,
   rotateSessionQrSecret,
   sanitizeFirestoreId,
@@ -59,7 +65,6 @@ import {
   upsertGradeToFirestore,
   upsertLessonPostToFirestore,
   upsertLibraryBookToFirestore,
-  upsertNotificationToFirestore,
   upsertServantSubmissionToFirestore,
   upsertSessionQrSecretToFirestore,
   upsertSessionToFirestore,
@@ -94,9 +99,9 @@ interface AppContextType {
   addChurchEvent: (eventData: Omit<ChurchEvent, 'id' | 'createdAt'>) => Promise<ChurchEvent>;
   updateChurchEvent: (id: string, updates: Partial<ChurchEvent>) => Promise<void>;
   deleteChurchEvent: (id: string) => Promise<void>;
-  exportBackupJson: () => void;
+  exportBackupJson: () => boolean;
   restoreBackupJson: (file: File) => Promise<{ success: boolean; message: string }>;
-  forceSyncDatabase: () => Promise<void>;
+  forceSyncDatabase: () => Promise<{ success: boolean; message: string; uploaded?: number }>;
   runSafeMigration: () => Promise<MigrationReport | null>;
   theme: 'light' | 'dark';
   backendStatus: BackendStatus;
@@ -105,6 +110,9 @@ interface AppContextType {
   firebaseConnected: boolean;
   firebaseSyncing: boolean;
   firebaseError: string | null;
+  adminMarkerVerified: boolean | null;
+  lastSyncedAt: string | null;
+  checkAdminSecurityStatus: () => Promise<{ connected: boolean; adminMarkerVerified: boolean; error?: string }>;
   toggleTheme: () => void;
   setCurrentUser: (user: UserProfile | null) => void;
   login: (identifier: string, password: string) => Promise<{ success: boolean; message: string }>;
@@ -115,6 +123,27 @@ interface AppContextType {
     needsProfileCompletion?: boolean;
     googleProfile?: { uid: string; email: string; name: string };
   }>;
+  loginWithEmailPassword: (
+    email: string,
+    password: string
+  ) => Promise<{
+    success: boolean;
+    message: string;
+    role?: UserProfile['role'];
+    needsProfileCompletion?: boolean;
+    googleProfile?: { uid: string; email: string; name: string };
+  }>;
+  registerWithEmailPassword: (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    age: number;
+    classId: ClassId;
+    role?: 'student' | 'servant';
+    guardianPhone?: string;
+    confessionFather?: string;
+  }) => Promise<{ success: boolean; message: string; name?: string }>;
   completeGoogleRegistration: (data: {
     phone: string;
     age: number;
@@ -180,7 +209,9 @@ interface AppContextType {
   getStudentScoreSummary: (studentId: string, termId?: string) => StudentScoreSummary;
   getClassLeaderboard: (classId: ClassId, termId?: string) => StudentScoreSummary[];
   getStudentSessionGrades: (studentId: string) => SessionGrade[];
-  addStudentByAdmin: (studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => Promise<UserProfile>;
+  addStudentByAdmin: (
+    studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'> & { password?: string }
+  ) => Promise<UserProfile>;
   changeStudentClass: (studentId: string, newClassId: ClassId) => void;
   updateServantProfile: (servantId: string, updates: { role?: UserProfile['role']; classId?: ClassId }) => void;
   yearWorkApprovedClasses: Record<string, boolean>;
@@ -254,7 +285,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('connecting');
   const [users, setUsers] = useState<UserProfile[]>(() => readStoredJson(STORAGE_KEYS.USERS, INITIAL_USERS));
-  const [currentUserId, setCurrentUserId] = useState<string>(() => readStoredString(STORAGE_KEYS.CURRENT_USER_ID, ''));
+  const [currentUserId, setCurrentUserId] = useState<string>(() =>
+    getApiToken() ? readStoredString(STORAGE_KEYS.CURRENT_USER_ID, '') : ''
+  );
   const [academicTerms, setAcademicTerms] = useState<AcademicTerm[]>(() =>
     readStoredJson(STORAGE_KEYS.TERMS, INITIAL_TERMS)
   );
@@ -290,6 +323,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [firebaseConnected, setFirebaseConnected] = useState<boolean>(false);
   const [firebaseSyncing, setFirebaseSyncing] = useState<boolean>(false);
   const [firebaseError, setFirebaseError] = useState<string | null>(null);
+  const [adminMarkerVerified, setAdminMarkerVerified] = useState<boolean | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   const snapshotRef = React.useRef({
     users,
@@ -340,6 +375,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (!fbUser) {
         setSessionQrSecrets({});
+        setAdminMarkerVerified(null);
         if (!getApiToken()) {
           setCurrentUserId('');
         }
@@ -364,6 +400,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             status: 'active',
           };
           await ensureAdminMarker(uid, adminProfile.email || ADMIN_BOOTSTRAP_EMAIL);
+          setAdminMarkerVerified(true);
           await upsertUserToFirestore(adminProfile, uid);
           await bootstrapExistingDataToFirestore(uid, snapshotRef.current);
           void runIdempotentFirestoreMigration(uid).catch(() => undefined);
@@ -391,20 +428,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             onNotifications: (list) => setNotifications(list),
             onError: (err) => {
               if (isQuotaExceededError(err)) {
-                setFirebaseError('تم بلوغ الحد اليومي لقراءة Firestore. سيتم تجديد الحصة غداً.');
+                setFirebaseError('تم بلوغ الحد اليومي لقراءة البيانات مؤقتاً، يرجى المحاولة لاحقاً.');
               }
             },
           });
           setFirebaseConnected(true);
           setFirebaseError(null);
-        } else if (fbUser.emailVerified) {
+          setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
+        } else if (isPermittedAuthUser(fbUser)) {
           const [hasAdminMarker, fbProfile] = await Promise.all([
             checkIsAdminMarker(uid),
             fetchUserFromFirestore(uid),
           ]);
 
           if (fbProfile && fbProfile.status === 'active') {
-            const effectiveRole: UserRole = hasAdminMarker ? 'admin' : fbProfile.role;
+            const effectiveRole: UserRole =
+              hasAdminMarker && fbUser.emailVerified ? 'admin' : fbProfile.role;
+            setAdminMarkerVerified(effectiveRole === 'admin' ? hasAdminMarker : false);
             const resolvedProfile: UserProfile = {
               ...fbProfile,
               role: effectiveRole,
@@ -439,16 +479,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               onNotifications: (list) => setNotifications(list),
               onError: (err) => {
                 if (isQuotaExceededError(err)) {
-                  setFirebaseError('تم بلوغ الحد اليومي لقراءة Firestore.');
+                  setFirebaseError('تم بلوغ الحد اليومي لقراءة البيانات مؤقتاً، يرجى المحاولة لاحقاً.');
                 }
               },
             });
             setFirebaseConnected(true);
             setFirebaseError(null);
+            setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
           } else {
             // Unapproved (pending), suspended, or rejected accounts must not enter dashboards or subscribe to data
             setCurrentUserId('');
             setSessionQrSecrets({});
+            setAdminMarkerVerified(false);
             if (fbProfile?.status === 'suspended') {
               setFirebaseError('تم إيقاف هذا الحساب مؤقتاً من قِبل أمانة الخدمة.');
             } else if (fbProfile?.status === 'rejected') {
@@ -458,9 +500,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       } catch (err: any) {
         if (isQuotaExceededError(err)) {
-          setFirebaseError('تم بلوغ الحد اليومي لقراءة Firestore.');
+          setFirebaseError('تم بلوغ الحد اليومي لقراءة البيانات مؤقتاً.');
         } else {
-          setFirebaseError(err?.message || 'تعذر المزامنة مع Firebase.');
+          setFirebaseError(err?.message || 'تعذر المزامنة السحابية للبيانات.');
         }
       } finally {
         setFirebaseSyncing(false);
@@ -640,7 +682,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!found) {
       return {
         success: false,
-        message: 'يرجى تسجيل الدخول باستخدام حساب جوجل (Google Sign-In) لحسابات Firebase السحابية.',
+        message: 'يرجى تسجيل الدخول باستخدام حساب جوجل المعتمد.',
       };
     }
     if (found.status === 'suspended') {
@@ -657,13 +699,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     return {
       success: false,
-      message: 'يلزم تسجيل الدخول بحساب جوجل (Google Sign-In) للتحقق الآمن من الهوية.',
+      message: 'يلزم تسجيل الدخول بحساب جوجل للتحقق الآمن من الهوية.',
     };
   };
 
   const trackFbError = (err: unknown) => {
     if (isQuotaExceededError(err)) {
-      setFirebaseError('تم بلوغ الحد اليومي لقاعدة بيانات Firebase.');
+      setFirebaseError('تم بلوغ الحد اليومي لقراءة البيانات مؤقتاً.');
     } else if (err instanceof Error) {
       setFirebaseError(err.message);
     }
@@ -679,6 +721,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const uid = sanitizeFirestoreId(fbUser.uid);
       const email = fbUser.email || '';
 
+      if (!fbUser.emailVerified) {
+        return {
+          success: false,
+          message: 'يرجى تأكيد البريد الإلكتروني في حساب جوجل أولاً قبل تقديم طلب الانضمام.',
+        };
+      }
+
       if (isVerifiedAdminEmail(email, fbUser.emailVerified)) {
         setFirebaseSyncing(true);
         const existingAdmin =
@@ -693,15 +742,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           status: 'active',
         };
         await ensureAdminMarker(uid, adminProfile.email || ADMIN_BOOTSTRAP_EMAIL);
+        setAdminMarkerVerified(true);
         await upsertUserToFirestore(adminProfile, uid);
         await bootstrapExistingDataToFirestore(uid, snapshotRef.current);
         void runIdempotentFirestoreMigration(uid).catch(() => undefined);
         setCurrentUserId(uid);
+        setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
         setFirebaseSyncing(false);
         return {
           success: true,
           role: 'admin' as const,
-          message: 'تم تسجيل دخول أمين الخدمة عبر جوجل ومزامنة البيانات مع Firebase.',
+          message: 'تم تسجيل دخول أمين الخدمة بنجاح.',
         };
       }
 
@@ -751,17 +802,275 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         googleProfile: {
           uid,
           email,
-          name: fbUser.displayName || email.split('@')[0] || 'عضو جديد',
+          name: fbUser.displayName?.trim() || email.split('@')[0] || 'عضو جديد',
         },
         message: 'يرجى استكمال بيانات الفصل ورقم الهاتف لإرسال طلب الانضمام.',
       };
     } catch (err: any) {
+      console.error('loginWithGoogle error:', err);
+      setFirebaseSyncing(false);
+      const rawMsg = err instanceof Error ? err.message : String(err || '');
+      let parsedCode = typeof err?.code === 'string' ? err.code : '';
+      let parsedError = rawMsg;
+      try {
+        const parsed = JSON.parse(rawMsg);
+        if (parsed?.code) parsedCode = String(parsed.code);
+        if (parsed?.error) parsedError = String(parsed.error);
+      } catch {
+        /* plain string error */
+      }
+
+      if (parsedCode === 'auth/popup-closed-by-user' || rawMsg.includes('popup-closed')) {
+        return { success: false, message: 'تم إغلاق نافذة تسجيل الدخول بجوجل.' };
+      }
+      if (parsedCode === 'auth/cancelled-popup-request') {
+        return { success: false, message: 'تم إلغاء نافذة تسجيل الدخول السابقة، حاول مرة أخرى.' };
+      }
+      if (parsedCode === 'auth/popup-blocked') {
+        return { success: false, message: 'المتصفح حجب نافذة تسجيل الدخول، يرجى السماح بالنوافذ المنبثقة والمحاولة مرة أخرى.' };
+      }
+      if (parsedCode === 'auth/unauthorized-domain') {
+        return { success: false, message: 'هذا النطاق غير مضاف في النطاقات المصرح بها لتسجيل الدخول بجوجل.' };
+      }
+      if (isQuotaExceededError(err) || parsedCode === 'resource-exhausted') {
+        return {
+          success: false,
+          message: 'تم بلوغ الحد اليومي لقاعدة البيانات مؤقتاً، يرجى المحاولة لاحقاً.',
+        };
+      }
+      if (
+        parsedCode === 'permission-denied' ||
+        parsedError.includes('PERMISSION_DENIED') ||
+        parsedError.includes('Missing or insufficient permissions')
+      ) {
+        return {
+          success: false,
+          message: 'تعذر التحقق من الحساب بسبب صلاحيات قاعدة البيانات. يرجى المحاولة بعد قليل أو مراجعة أمين الخدمة.',
+        };
+      }
+      if (
+        parsedCode === 'unavailable' ||
+        parsedError.includes('offline') ||
+        parsedError.includes('network')
+      ) {
+        return {
+          success: false,
+          message: 'تعذر الاتصال حالياً. تأكد من اتصال الإنترنت وحاول مرة أخرى.',
+        };
+      }
+      return {
+        success: false,
+        message: 'تعذر تسجيل الدخول عبر جوجل، يرجى المحاولة مرة أخرى.',
+      };
+    }
+  };
+
+  const parseFirebaseAuthOrFirestoreError = (err: unknown, fallbackMessage: string): string => {
+    const rawMsg = err instanceof Error ? err.message : String(err || '');
+    let parsedCode = typeof (err as any)?.code === 'string' ? String((err as any).code) : '';
+    let parsedError = rawMsg;
+    try {
+      const parsed = JSON.parse(rawMsg);
+      if (parsed?.code) parsedCode = String(parsed.code);
+      if (parsed?.error) parsedError = String(parsed.error);
+    } catch {
+      /* plain string error */
+    }
+
+    if (parsedCode === 'auth/email-already-in-use') {
+      return 'هذا البريد الإلكتروني مسجل بالفعل على المنصة. يمكنك تسجيل الدخول به أو استخدام بريد آخر.';
+    }
+    if (parsedCode === 'auth/invalid-email') {
+      return 'صيغة البريد الإلكتروني غير صحيحة (مثال: name@stpaul.school).';
+    }
+    if (parsedCode === 'auth/weak-password') {
+      return 'كلمة المرور ضعيفة جداً؛ يجب أن تتكون من ٦ أحرف أو أرقام على الأقل.';
+    }
+    if (
+      parsedCode === 'auth/invalid-credential' ||
+      parsedCode === 'auth/wrong-password' ||
+      parsedCode === 'auth/user-not-found'
+    ) {
+      return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+    }
+    if (parsedCode === 'auth/too-many-requests') {
+      return 'تم إيقاف المحاولات مؤقتاً لكثرة المحاولات الخاطئة، يرجى المحاولة بعد قليل.';
+    }
+    if (parsedCode === 'auth/operation-not-allowed') {
+      return 'تسجيل الدخول بالبريد وكلمة المرور غير مفعّل حالياً في إعدادات Firebase Authentication.';
+    }
+    if (parsedCode === 'auth/user-disabled') {
+      return 'تم تعطيل هذا الحساب، يرجى مراجعة أمين الخدمة.';
+    }
+    if (isQuotaExceededError(err) || parsedCode === 'resource-exhausted') {
+      return 'تم بلوغ الحد اليومي لقاعدة البيانات مؤقتاً، يرجى المحاولة لاحقاً أو إبلاغ أمين الخدمة.';
+    }
+    if (
+      parsedCode === 'permission-denied' ||
+      parsedError.includes('PERMISSION_DENIED') ||
+      parsedError.includes('Missing or insufficient permissions')
+    ) {
+      return 'تم رفض العملية من قواعد الأمان في قاعدة البيانات. تأكد من تحديث قواعد Firebase أو راجع أمين الخدمة.';
+    }
+    if (
+      parsedCode === 'unavailable' ||
+      parsedError.includes('offline') ||
+      parsedError.includes('network')
+    ) {
+      return 'تعذر الاتصال حالياً. تأكد من اتصال الإنترنت وحاول مرة أخرى.';
+    }
+    return fallbackMessage;
+  };
+
+  const loginWithEmailPassword = async (email: string, password: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
+      return { success: false, message: 'يرجى إدخال البريد الإلكتروني وكلمة المرور.' };
+    }
+    try {
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const fbUser = cred.user;
+      const uid = sanitizeFirestoreId(fbUser.uid);
+
+      const [hasAdminMarker, existingFbUser] = await Promise.all([
+        checkIsAdminMarker(uid),
+        fetchUserFromFirestore(uid),
+      ]);
+
+      if (existingFbUser) {
+        if (existingFbUser.status === 'suspended') {
+          setCurrentUserId('');
+          await signOut(auth);
+          return {
+            success: false,
+            message: 'تم إيقاف هذا الحساب مؤقتاً من قِبل أمانة الخدمة.',
+          };
+        }
+        if (existingFbUser.status === 'rejected') {
+          setCurrentUserId('');
+          await signOut(auth);
+          return {
+            success: false,
+            message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.',
+          };
+        }
+        if (existingFbUser.status === 'pending') {
+          setCurrentUserId('');
+          await signOut(auth);
+          return {
+            success: false,
+            message: 'أسف، برجاء انتظار موافقة أمين الخدمة على حسابك أولاً',
+          };
+        }
+
+        const effectiveRole: UserRole =
+          hasAdminMarker && fbUser.emailVerified ? 'admin' : existingFbUser.role;
+        const resolved = { ...existingFbUser, role: effectiveRole };
+        setUsers((prev) => [resolved, ...prev.filter((u) => u.id !== uid)]);
+        setCurrentUserId(uid);
+        return {
+          success: true,
+          role: effectiveRole,
+          message: 'تم تسجيل الدخول بنجاح.',
+        };
+      }
+
+      return {
+        success: false,
+        needsProfileCompletion: true,
+        googleProfile: {
+          uid,
+          email: fbUser.email || cleanEmail,
+          name: fbUser.displayName?.trim() || cleanEmail.split('@')[0] || 'عضو جديد',
+        },
+        message: 'يرجى استكمال بيانات الفصل ورقم الهاتف لإرسال طلب الانضمام.',
+      };
+    } catch (err) {
+      console.error('loginWithEmailPassword error:', err);
       setFirebaseSyncing(false);
       return {
         success: false,
-        message: err?.message?.includes('popup-closed')
-          ? 'تم إغلاق نافذة تسجيل الدخول بجوجل.'
-          : 'تعذر تسجيل الدخول عبر جوجل: ' + (err?.message || ''),
+        message: parseFirebaseAuthOrFirestoreError(err, 'تعذر تسجيل الدخول بالبريد وكلمة المرور.'),
+      };
+    }
+  };
+
+  const registerWithEmailPassword = async (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    age: number;
+    classId: ClassId;
+    role?: 'student' | 'servant';
+    guardianPhone?: string;
+    confessionFather?: string;
+  }) => {
+    const cleanName = data.name.trim();
+    const cleanEmail = data.email.trim().toLowerCase();
+    if (!cleanName) {
+      return { success: false, message: 'يرجى كتابة الاسم الكامل.' };
+    }
+    if (!cleanEmail) {
+      return { success: false, message: 'يرجى إدخال البريد الإلكتروني الخاص بالحساب.' };
+    }
+    if (!data.password || data.password.length < 6) {
+      return { success: false, message: 'يجب أن تكون كلمة المرور ٦ أحرف أو أرقام على الأقل.' };
+    }
+
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, data.password);
+      const fbUser = cred.user;
+      try {
+        await updateProfile(fbUser, { displayName: cleanName });
+      } catch {
+        /* non-fatal */
+      }
+      const uid = sanitizeFirestoreId(fbUser.uid);
+      const requestedRole = data.role === 'servant' ? 'servant' : 'student';
+      const newProfile: UserProfile = {
+        id: uid,
+        name: cleanName,
+        email: fbUser.email || cleanEmail,
+        phone: data.phone.trim(),
+        age: Number(data.age || 14),
+        role: 'student',
+        requestedRole,
+        status: 'pending',
+        classId: data.classId,
+        guardianPhone: data.guardianPhone?.trim() || undefined,
+        confessionFather: data.confessionFather?.trim() || undefined,
+        registeredAt: new Date().toISOString().split('T')[0],
+        notes: requestedRole === 'servant' ? 'طلب انضمام كخادم' : undefined,
+      };
+
+      await registerPendingUserToFirestore(newProfile, uid);
+      setUsers((prev) => [newProfile, ...prev.filter((u) => u.id !== uid)]);
+      setCurrentUserId('');
+      await signOut(auth).catch(() => undefined);
+      return {
+        success: true,
+        name: newProfile.name,
+        message: 'تم إنشاء الحساب وإرسال طلب الانضمام وينتظر موافقة أمين الخدمة.',
+      };
+    } catch (err) {
+      console.error('registerWithEmailPassword error:', err);
+      const rawMsg = err instanceof Error ? err.message : String(err || '');
+      if (rawMsg === 'INVALID_CLASS_ID') {
+        return { success: false, message: 'يرجى اختيار الفصل الدراسي الصحيح.' };
+      }
+      if (rawMsg === 'ACCOUNT_ALREADY_ACTIVE') {
+        return { success: false, message: 'هذا الحساب مفعل بالفعل، يمكنك تسجيل الدخول مباشرة.' };
+      }
+      if (rawMsg === 'ACCOUNT_REJECTED') {
+        return { success: false, message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.' };
+      }
+      if (rawMsg === 'ACCOUNT_SUSPENDED') {
+        return { success: false, message: 'تم إيقاف هذا الحساب مؤقتاً من قِبل أمانة الخدمة.' };
+      }
+      return {
+        success: false,
+        message: parseFirebaseAuthOrFirestoreError(err, 'تعذر إنشاء الحساب، يرجى المحاولة مرة أخرى.'),
       };
     }
   };
@@ -776,13 +1085,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }) => {
     const fbUser = auth.currentUser;
     if (!fbUser) {
-      return { success: false, message: 'يرجى تسجيل الدخول بحساب جوجل أولاً.' };
+      return { success: false, message: 'يرجى تسجيل الدخول بحسابك أولاً.' };
     }
+    if (!isPermittedAuthUser(fbUser)) {
+      return { success: false, message: 'يرجى تأكيد البريد الإلكتروني أولاً.' };
+    }
+
     const uid = sanitizeFirestoreId(fbUser.uid);
     const requestedRole = data.role === 'servant' ? 'servant' : 'student';
+    const cleanName =
+      fbUser.displayName?.trim() || fbUser.email?.split('@')[0]?.trim() || 'عضو جديد';
     const newProfile: UserProfile = {
       id: uid,
-      name: fbUser.displayName || fbUser.email?.split('@')[0] || 'عضو جديد',
+      name: cleanName,
       email: fbUser.email || undefined,
       phone: data.phone.trim(),
       age: Number(data.age || 14),
@@ -798,58 +1113,127 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     try {
-      await upsertUserToFirestore(newProfile, uid);
-      const joinNotif: AppNotification = {
-        id: `notif-reg-${uid}`,
-        title: requestedRole === 'servant' ? 'طلب انضمام خادم جديد' : 'طلب التحاق مخدوم جديد',
-        message: `سجل ${newProfile.name} (${requestedRole === 'servant' ? 'كخادم' : 'كمخدوم'}) وينتظر الموافقة للدخول للفصل.`,
-        timestamp: 'الآن',
-        type: 'new_student',
-        read: false,
-        audienceUserId: uid,
-        audienceRoles: ['admin', 'assistant'],
-      };
-      await upsertNotificationToFirestore(joinNotif, uid).catch(() => undefined);
+      await registerPendingUserToFirestore(newProfile, uid);
 
       setUsers((prev) => [newProfile, ...prev.filter((u) => u.id !== uid)]);
       setCurrentUserId('');
       return {
         success: true,
         name: newProfile.name,
-        message: 'تم تسجيل بياناتك في Firebase وينتظر الحساب موافقة أمين الخدمة.',
+        message: 'تم تسجيل بياناتك بنجاح وينتظر الحساب موافقة أمين الخدمة.',
       };
     } catch (err: any) {
+      console.error('completeGoogleRegistration error:', err);
       trackFbError(err);
-      return { success: false, message: 'تعذر حفظ البيانات في Firebase.' };
+
+      const rawMsg = err instanceof Error ? err.message : String(err || '');
+      let parsedCode = typeof err?.code === 'string' ? err.code : '';
+      let parsedError = rawMsg;
+      try {
+        const parsed = JSON.parse(rawMsg);
+        if (parsed?.code) parsedCode = String(parsed.code);
+        if (parsed?.error) parsedError = String(parsed.error);
+      } catch {
+        /* plain string error */
+      }
+
+      if (rawMsg === 'UNVERIFIED_EMAIL') {
+        return { success: false, message: 'يرجى تأكيد البريد الإلكتروني في حساب جوجل أولاً.' };
+      }
+      if (rawMsg === 'INVALID_CLASS_ID') {
+        return { success: false, message: 'يرجى اختيار الفصل الدراسي الصحيح.' };
+      }
+      if (rawMsg === 'ACCOUNT_ALREADY_ACTIVE') {
+        return { success: false, message: 'هذا الحساب مفعل بالفعل، يمكنك تسجيل الدخول مباشرة.' };
+      }
+      if (rawMsg === 'ACCOUNT_REJECTED') {
+        return { success: false, message: 'هذا الطلب مرفوض. تواصل مع أمين الخدمة للمراجعة.' };
+      }
+      if (rawMsg === 'ACCOUNT_SUSPENDED') {
+        return { success: false, message: 'تم إيقاف هذا الحساب مؤقتاً من قِبل أمانة الخدمة.' };
+      }
+      if (isQuotaExceededError(err) || parsedCode === 'resource-exhausted') {
+        return {
+          success: false,
+          message: 'تم بلوغ الحد اليومي لقاعدة البيانات مؤقتاً، يرجى المحاولة لاحقاً أو إبلاغ أمين الخدمة.',
+        };
+      }
+      if (
+        parsedCode === 'permission-denied' ||
+        parsedError.includes('PERMISSION_DENIED') ||
+        parsedError.includes('Missing or insufficient permissions')
+      ) {
+        return {
+          success: false,
+          message: 'تم رفض حفظ الطلب من قواعد الحماية (permission-denied). تأكد من تحديث قواعد الأمان في Firebase أو راجع أمين الخدمة.',
+        };
+      }
+      if (
+        parsedCode === 'unavailable' ||
+        parsedError.includes('offline') ||
+        parsedError.includes('network')
+      ) {
+        return {
+          success: false,
+          message: 'تعذر الاتصال بقاعدة البيانات حالياً. تأكد من اتصال الإنترنت وحاول مرة أخرى.',
+        };
+      }
+      return { success: false, message: 'تعذر حفظ البيانات. يرجى المحاولة مرة أخرى.' };
     }
   };
 
   const syncNowToFirebase = async () => {
     const uid = getFbUid();
-    if (!uid) {
+    const isAdminActor =
+      currentUser?.role === 'admin' ||
+      isVerifiedAdminEmail(auth.currentUser?.email, auth.currentUser?.emailVerified);
+    if (!uid || !isAdminActor) {
       return {
         success: false,
-        message: 'سجّل الدخول بحساب جوجل للأدمن (ts199075@gmail.com) لبدء المزامنة مع Firebase.',
+        message: 'يتطلب إتمام المزامنة تسجيل الدخول بحساب مسؤول النظام عبر جوجل.',
       };
     }
     try {
       setFirebaseSyncing(true);
       const uploaded = await bootstrapExistingDataToFirestore(uid, snapshotRef.current);
+      setFirebaseConnected(true);
       setFirebaseError(null);
+      setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
       return {
         success: true,
         uploaded,
         message:
           uploaded > 0
-            ? `تم رفع ومزامنة ${uploaded} سجل جديد إلى قاعدة بيانات Firebase بنجاح.`
-            : 'جميع بيانات المدرسة متزامنة ومؤمّنة بالكامل على Firebase.',
+            ? `تم رفع ومزامنة ${uploaded} سجل جديد إلى قاعدة البيانات السحابية بنجاح.`
+            : 'جميع بيانات المدرسة متزامنة ومؤمّنة بالكامل في قاعدة البيانات السحابية.',
       };
     } catch (err: any) {
       trackFbError(err);
-      return { success: false, message: 'حدث خطأ أثناء المزامنة مع Firebase.' };
+      return {
+        success: false,
+        message: `تعذر إتمام المزامنة السحابية: ${err instanceof Error ? err.message : 'خطأ غير متوقع'}`,
+      };
     } finally {
       setFirebaseSyncing(false);
     }
+  };
+
+  const checkAdminSecurityStatus = async () => {
+    const conn = await testConnection();
+    setFirebaseConnected(conn.online);
+    if (!conn.online && conn.error) {
+      setFirebaseError(conn.error);
+    } else if (conn.online) {
+      setFirebaseError(null);
+    }
+    const uid = getFbUid();
+    const markerOk = uid ? await checkIsAdminMarker(uid) : false;
+    setAdminMarkerVerified(uid ? markerOk : null);
+    return {
+      connected: conn.online,
+      adminMarkerVerified: markerOk,
+      error: conn.error,
+    };
   };
 
   const runSafeMigration = async (): Promise<MigrationReport | null> => {
@@ -859,6 +1243,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setFirebaseSyncing(true);
       const report = await runIdempotentFirestoreMigration(uid);
       setFirebaseError(null);
+      setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
       return report;
     } catch (err: any) {
       trackFbError(err);
@@ -876,6 +1261,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setApiToken('');
     setCurrentUserId('');
     setSessionQrSecrets({});
+    setAdminMarkerVerified(null);
+    setLastSyncedAt(null);
     setFirebaseError(null);
     try {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
@@ -902,7 +1289,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return (registeredUser as UserProfile) || users[0];
     }
 
-    throw new Error('يرجى التسجيل باستخدام حساب جوجل (Google Sign-In) لحفظ طلبك في Firebase بأمان.');
+    throw new Error('يرجى التسجيل باستخدام حساب جوجل لإرسال طلبك بأمان.');
   };
 
   const approveUserWithDetails = async (
@@ -1103,24 +1490,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const addStudentByAdmin = async (studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'>) => {
+  const addStudentByAdmin = async (
+    studentData: Omit<UserProfile, 'id' | 'role' | 'status' | 'registeredAt'> & { password?: string }
+  ) => {
+    const { password, ...profileFields } = studentData;
+    const cleanEmail = profileFields.email?.trim().toLowerCase();
+    const cleanPassword = password?.trim();
+
+    let resolvedId = `stud-${Date.now()}`;
+    if (cleanEmail || cleanPassword) {
+      if (!cleanEmail) {
+        throw new Error('يرجى إدخال البريد الإلكتروني للطالب عند تعيين كلمة مرور.');
+      }
+      if (!cleanPassword || cleanPassword.length < 6) {
+        throw new Error('يجب أن تتكون كلمة مرور الطالب من ٦ أحرف أو أرقام على الأقل.');
+      }
+      try {
+        resolvedId = await createAuthAccountWithoutSigningOut(
+          cleanEmail,
+          cleanPassword,
+          profileFields.name.trim()
+        );
+      } catch (err) {
+        throw new Error(
+          parseFirebaseAuthOrFirestoreError(err, 'تعذر إنشاء حساب الدخول للطالب، تأكد من صحة البيانات.')
+        );
+      }
+    }
+
     const newStudent: UserProfile = {
-      ...studentData,
-      id: `stud-${Date.now()}`,
+      ...profileFields,
+      ...(cleanEmail ? { email: cleanEmail } : {}),
+      id: resolvedId,
       status: 'active',
       role: 'student',
       registeredAt: new Date().toISOString().split('T')[0],
     };
-    setUsers((prev) => [newStudent, ...prev]);
+    setUsers((prev) => [newStudent, ...prev.filter((u) => u.id !== resolvedId)]);
     const fbUid = getFbUid();
     if (fbUid) {
-      void upsertUserToFirestore(newStudent, newStudent.id).catch(trackFbError);
+      await upsertUserToFirestore(newStudent, newStudent.id).catch((err) => {
+        trackFbError(err);
+        throw new Error(
+          parseFirebaseAuthOrFirestoreError(err, 'تم إنشاء الحساب ولكن تعذر حفظ بيانات الطالب في قاعدة البيانات.')
+        );
+      });
     }
     if (backendStatus === 'online') {
       void remote('/api/users/action', {
         method: 'POST',
-        body: JSON.stringify({ action: 'addStudent', student: studentData }),
-      });
+        body: JSON.stringify({ action: 'addStudent', student: profileFields }),
+      }).catch(() => undefined);
     }
     return newStudent;
   };
@@ -1857,7 +2277,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const exportBackupJson = () => {
+  const exportBackupJson = (): boolean => {
+    if (currentUser?.role !== 'admin') return false;
     const backupObj = {
       version: 1,
       exportedAt: new Date().toISOString(),
@@ -1888,9 +2309,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    return true;
   };
 
   const restoreBackupJson = async (file: File): Promise<{ success: boolean; message: string }> => {
+    if (currentUser?.role !== 'admin') {
+      return { success: false, message: 'هذه العملية مخصصة لمسؤول النظام فقط.' };
+    }
+    const fbUid = getFbUid();
+    if (!fbUid && backendStatus !== 'online') {
+      return {
+        success: false,
+        message: 'يلزم تسجيل الدخول بحساب جوجل لمسؤول النظام لإتمام دمج النسخة الاحتياطية في قاعدة البيانات.',
+      };
+    }
+
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
@@ -1898,34 +2331,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!data || (!Array.isArray(data.users) && !Array.isArray(data.grades))) {
         return { success: false, message: 'صيغة ملف النسخة الاحتياطية غير صالحة.' };
       }
-      if (Array.isArray(data.users)) setUsers(data.users);
-      if (Array.isArray(data.sessions)) setSessions(data.sessions);
-      if (data.sessionQrSecrets && typeof data.sessionQrSecrets === 'object') {
-        setSessionQrSecrets(data.sessionQrSecrets);
-      }
-      if (Array.isArray(data.grades)) setGrades(data.grades);
-      if (data.finalExamScores) setFinalExamScores(data.finalExamScores);
-      if (Array.isArray(data.churchEvents)) setChurchEvents(data.churchEvents);
-      if (Array.isArray(data.lessonPosts)) setLessonPosts(data.lessonPosts);
-      if (Array.isArray(data.libraryBooks)) setLibraryBooks(data.libraryBooks);
-      if (Array.isArray(data.academicTerms)) setAcademicTerms(data.academicTerms);
 
-      const fbUid = getFbUid();
+      const mergedPayload = {
+        users: Array.isArray(data.users) ? data.users : users,
+        academicTerms: Array.isArray(data.academicTerms) ? data.academicTerms : academicTerms,
+        classAssignedBooks:
+          data.classAssignedBooks && typeof data.classAssignedBooks === 'object'
+            ? data.classAssignedBooks
+            : classAssignedBooks,
+        sessions: Array.isArray(data.sessions) ? data.sessions : sessions,
+        grades: Array.isArray(data.grades) ? data.grades : grades,
+        finalExamScores:
+          data.finalExamScores && typeof data.finalExamScores === 'object'
+            ? data.finalExamScores
+            : finalExamScores,
+        servantSubmissions: Array.isArray(data.servantSubmissions)
+          ? data.servantSubmissions
+          : servantSubmissions,
+        lessonPosts: Array.isArray(data.lessonPosts) ? data.lessonPosts : lessonPosts,
+        libraryBooks: Array.isArray(data.libraryBooks) ? data.libraryBooks : libraryBooks,
+        churchEvents: Array.isArray(data.churchEvents) ? data.churchEvents : churchEvents,
+        yearWorkApprovedClasses:
+          data.yearWorkApprovedClasses && typeof data.yearWorkApprovedClasses === 'object'
+            ? data.yearWorkApprovedClasses
+            : yearWorkApprovedClasses,
+        notifications: Array.isArray(data.notifications) ? data.notifications : notifications,
+      };
+
+      let uploadedToCloud = 0;
       if (fbUid) {
-        await bootstrapExistingDataToFirestore(fbUid, {
-          users: Array.isArray(data.users) ? data.users : users,
-          academicTerms: Array.isArray(data.academicTerms) ? data.academicTerms : academicTerms,
-          classAssignedBooks: data.classAssignedBooks || classAssignedBooks,
-          sessions: Array.isArray(data.sessions) ? data.sessions : sessions,
-          grades: Array.isArray(data.grades) ? data.grades : grades,
-          finalExamScores: data.finalExamScores || finalExamScores,
-          servantSubmissions: Array.isArray(data.servantSubmissions) ? data.servantSubmissions : servantSubmissions,
-          lessonPosts: Array.isArray(data.lessonPosts) ? data.lessonPosts : lessonPosts,
-          libraryBooks: Array.isArray(data.libraryBooks) ? data.libraryBooks : libraryBooks,
-          churchEvents: Array.isArray(data.churchEvents) ? data.churchEvents : churchEvents,
-          yearWorkApprovedClasses: data.yearWorkApprovedClasses || yearWorkApprovedClasses,
-          notifications: Array.isArray(data.notifications) ? data.notifications : notifications,
-        });
+        setFirebaseSyncing(true);
+        try {
+          uploadedToCloud = await bootstrapExistingDataToFirestore(fbUid, mergedPayload);
+          setFirebaseError(null);
+          setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
+        } finally {
+          setFirebaseSyncing(false);
+        }
       }
 
       if (backendStatus === 'online') {
@@ -1934,26 +2376,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           body: JSON.stringify({ data }),
         });
       }
+
+      if (Array.isArray(data.users)) setUsers(data.users);
+      if (Array.isArray(data.sessions)) setSessions(data.sessions);
+      if (data.sessionQrSecrets && typeof data.sessionQrSecrets === 'object') {
+        setSessionQrSecrets(data.sessionQrSecrets);
+      }
+      if (Array.isArray(data.grades)) setGrades(data.grades);
+      if (data.finalExamScores && typeof data.finalExamScores === 'object') {
+        setFinalExamScores(data.finalExamScores);
+      }
+      if (Array.isArray(data.churchEvents)) setChurchEvents(data.churchEvents);
+      if (Array.isArray(data.lessonPosts)) setLessonPosts(data.lessonPosts);
+      if (Array.isArray(data.libraryBooks)) setLibraryBooks(data.libraryBooks);
+      if (Array.isArray(data.academicTerms)) setAcademicTerms(data.academicTerms);
+      if (data.classAssignedBooks && typeof data.classAssignedBooks === 'object') {
+        setClassAssignedBooks(data.classAssignedBooks);
+      }
+      if (Array.isArray(data.servantSubmissions)) setServantSubmissions(data.servantSubmissions);
+      if (data.yearWorkApprovedClasses && typeof data.yearWorkApprovedClasses === 'object') {
+        setYearWorkApprovedClasses(data.yearWorkApprovedClasses);
+      }
+      if (Array.isArray(data.notifications)) setNotifications(data.notifications);
+
       return {
         success: true,
-        message: `تم استعادة النسخة الاحتياطية بنجاح (${data.users?.length || 0} مستخدم، ${data.grades?.length || 0} درجات).`,
+        message: fbUid
+          ? `تم التحقق ودمج النسخة الاحتياطية بأمان (${data.users?.length || 0} مستخدم، ${data.grades?.length || 0} درجات، وتم رفع ${uploadedToCloud} سجل جديد لقاعدة البيانات).`
+          : `تم استعادة النسخة الاحتياطية على الخادم بنجاح (${data.users?.length || 0} مستخدم، ${data.grades?.length || 0} درجات).`,
       };
     } catch (err: any) {
-      return { success: false, message: 'تعذر قراءة ملف النسخة الاحتياطية: ' + (err?.message || '') };
+      trackFbError(err);
+      return { success: false, message: 'تعذر استعادة النسخة الاحتياطية: ' + (err?.message || '') };
     }
   };
 
-  const forceSyncDatabase = async () => {
-    const fbUid = getFbUid();
-    if (fbUid) {
-      try {
-        await bootstrapExistingDataToFirestore(fbUid, snapshotRef.current);
-      } catch (err) {
-        trackFbError(err);
-      }
+  const forceSyncDatabase = async (): Promise<{ success: boolean; message: string; uploaded?: number }> => {
+    if (currentUser?.role !== 'admin') {
+      return { success: false, message: 'هذه العملية مخصصة لمسؤول النظام فقط.' };
     }
-    if (backendStatus === 'online') {
-      try {
+    const fbUid = getFbUid();
+    if (!fbUid && backendStatus !== 'online') {
+      return {
+        success: false,
+        message: 'تعذر إتمام المزامنة: يرجى تسجيل الدخول بحساب جوجل لمسؤول النظام أولاً.',
+      };
+    }
+
+    let uploaded = 0;
+    try {
+      if (fbUid) {
+        setFirebaseSyncing(true);
+        uploaded = await bootstrapExistingDataToFirestore(fbUid, snapshotRef.current);
+        setFirebaseConnected(true);
+        setFirebaseError(null);
+        setLastSyncedAt(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }));
+      }
+      if (backendStatus === 'online') {
         await apiRequest('/api/sync/push', {
           method: 'POST',
           body: JSON.stringify({
@@ -1968,9 +2447,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             classAssignedBooks,
           }),
         });
-      } catch (e) {
-        console.error('Force sync error:', e);
       }
+      return {
+        success: true,
+        uploaded,
+        message:
+          fbUid
+            ? uploaded > 0
+              ? `تمت المزامنة السحابية بنجاح وتم رفع ${uploaded} سجل جديد بدون حذف أي بيانات.`
+              : 'جميع السجلات متزامنة بالكامل مع قاعدة البيانات السحابية.'
+            : 'تمت مزامنة البيانات مع الخادم بنجاح.',
+      };
+    } catch (err: any) {
+      trackFbError(err);
+      return {
+        success: false,
+        message: `فشلت المزامنة: ${err instanceof Error ? err.message : 'خطأ غير متوقع'}`,
+      };
+    } finally {
+      setFirebaseSyncing(false);
     }
   };
 
@@ -2099,10 +2594,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         firebaseConnected,
         firebaseSyncing,
         firebaseError,
+        adminMarkerVerified,
+        lastSyncedAt,
+        checkAdminSecurityStatus,
         toggleTheme,
         setCurrentUser,
         login,
         loginWithGoogle,
+        loginWithEmailPassword,
+        registerWithEmailPassword,
         completeGoogleRegistration,
         syncNowToFirebase,
         registerUser,

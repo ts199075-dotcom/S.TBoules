@@ -45,10 +45,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     theme,
     toggleTheme,
     lessonPosts,
-    backendStatus,
-    firebaseUser,
-    firebaseConnected,
-    firebaseSyncing,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -123,43 +119,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-stone-400">
-            <span
-              className={`hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
-                firebaseUser
-                  ? 'border-emerald-700/60 text-emerald-300'
-                  : firebaseConnected && backendStatus === 'online'
-                    ? 'border-emerald-700/60 text-emerald-300'
-                    : backendStatus === 'connecting'
-                      ? 'border-amber-700/60 text-amber-300'
-                      : 'border-stone-600 text-stone-400'
-              }`}
-              title={
-                firebaseUser
-                  ? 'متصل بقاعدة بيانات Firebase السحابية'
-                  : backendStatus === 'online'
-                    ? 'الخادم متصل'
-                    : 'وضع محلي'
-              }
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  firebaseSyncing
-                    ? 'bg-amber-400 animate-pulse'
-                    : firebaseUser || backendStatus === 'online'
-                      ? 'bg-emerald-400'
-                      : backendStatus === 'connecting'
-                        ? 'bg-amber-400'
-                        : 'bg-stone-500'
-                }`}
-              />
-              {firebaseSyncing
-                ? 'جاري مزامنة Firebase'
-                : firebaseUser
-                  ? 'Firebase متصل'
-                  : backendStatus === 'online'
-                    ? 'الخادم متصل'
-                    : 'وضع محلي'}
-            </span>
             {currentUser ? (
               <div className="flex items-center gap-1">
                 <span className="text-amber-400 font-medium">

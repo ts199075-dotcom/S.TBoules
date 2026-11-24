@@ -19,7 +19,6 @@ import {
   Award,
   Layers,
   PartyPopper,
-  FileCheck,
   Megaphone,
 } from 'lucide-react';
 

@@ -26,8 +26,19 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isEmailVerified() {
+    function isStrictlyEmailVerified() {
       return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        (
+          'firebase' in request.auth.token &&
+          'sign_in_provider' in request.auth.token.firebase &&
+          request.auth.token.firebase.sign_in_provider == 'password'
+        )
+      );
     }
 
     function isOwner(uid) {
@@ -35,12 +46,12 @@ service cloud.firestore {
     }
 
     function isVerifiedBootstrapAdmin() {
-      return isEmailVerified() && request.auth.token.email == 'ts199075@gmail.com';
+      return isStrictlyEmailVerified() && request.auth.token.email == 'ts199075@gmail.com';
     }
 
     function isAdmin() {
       return isVerifiedBootstrapAdmin() ||
-        (isEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+        (isStrictlyEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     function userDoc() {
@@ -61,14 +72,20 @@ service cloud.firestore {
       return c is string && c in ['primary_4', 'primary_5', 'primary_6', 'prep_1', 'prep_2_3', 'secondary', 'adults'];
     }
 
-    function isServantForClass(cid) {
-      return isAdmin() || (
-        hasActiveUserDoc() &&
+    function isRoleServantForClass(u, cid) {
+      return u.status == 'active' &&
         isValidClassId(cid) &&
         (
-          userDoc().role == 'assistant' ||
-          (userDoc().role == 'servant' && userDoc().classId == cid)
-        )
+          u.role == 'assistant' ||
+          (u.role == 'servant' && u.classId == cid)
+        );
+    }
+
+    function isServantForClass(cid) {
+      return isAdmin() || (
+        isEmailVerified() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        isRoleServantForClass(userDoc(), cid)
       );
     }
 
@@ -112,16 +129,20 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/session_qr_secrets/$(sid)).data;
     }
 
+    function matchesActiveQrSecret(secret, submittedCode, cid) {
+      return secret.qrActive == true &&
+        secret.classId == cid &&
+        secret.expiresAtMs is number &&
+        secret.expiresAtMs > request.time.toMillis() &&
+        submittedCode == secret.qrSecretCode;
+    }
+
     function isValidStudentQrCheckin(sid, submittedCode, cid) {
-      return exists(/databases/$(database)/documents/session_qr_secrets/$(sid)) &&
-        qrSecretDoc(sid).qrActive == true &&
-        qrSecretDoc(sid).classId == cid &&
-        qrSecretDoc(sid).expiresAtMs is number &&
-        qrSecretDoc(sid).expiresAtMs > request.time.toMillis() &&
-        submittedCode is string &&
+      return submittedCode is string &&
         submittedCode.size() >= 4 &&
         submittedCode.size() <= 128 &&
-        submittedCode == qrSecretDoc(sid).qrSecretCode;
+        exists(/databases/$(database)/documents/session_qr_secrets/$(sid)) &&
+        matchesActiveQrSecret(qrSecretDoc(sid), submittedCode, cid);
     }
 
     // =========================================================================
@@ -629,6 +650,43 @@ service cloud.firestore {
       allow delete: if isValidId(sessionId) && isAdmin();
     }
 
+    function canServantUpdateGradeFields(inData, exData) {
+      return inData.diff(exData).affectedKeys().hasOnly([
+        'sessionTitle', 'date', 'classId', 'termId', 'exam', 'homework',
+        'attendance', 'participation', 'prayer', 'tools', 'notes',
+        'qrAttendedAt', 'updatedByUid', 'serverUpdatedAt'
+      ]);
+    }
+
+    function canStudentQrUpdateGrade(inData, exData) {
+      return exData.studentId == request.auth.uid &&
+        existing().attendance == 0 &&
+        inData.attendance == 1 &&
+        inData.exam == exData.exam &&
+        inData.homework == exData.homework &&
+        inData.participation == exData.participation &&
+        inData.prayer == exData.prayer &&
+        inData.tools == exData.tools &&
+        'submittedQrCode' in inData &&
+        inData.diff(exData).affectedKeys().hasOnly(['attendance', 'submittedQrCode', 'qrAttendedAt', 'updatedByUid', 'serverUpdatedAt']) &&
+        exists(/databases/$(database)/documents/sessions/$(exData.sessionId)) &&
+        isValidStudentQrCheckin(exData.sessionId, inData.submittedQrCode, sessionDoc(exData.sessionId).classId);
+    }
+
+    function canActiveNonAdminUpdateGrade(u, inData, exData) {
+      let sessionClassId = sessionDoc(exData.sessionId).classId;
+      return u.status == 'active' && (
+        (
+          u.role in ['assistant', 'servant'] &&
+          canServantUpdateGradeFields(inData, exData) &&
+          exists(/databases/$(database)/documents/sessions/$(exData.sessionId)) &&
+          isValidClassId(sessionClassId) &&
+          (u.role == 'assistant' || u.classId == sessionClassId)
+        ) ||
+        canStudentQrUpdateGrade(inData, exData)
+      );
+    }
+
     // Session grades & QR attendance (/grades/{gradeId})
     match /grades/{gradeId} {
       allow get: if isValidId(gradeId) && isActiveMember() && (
@@ -667,28 +725,16 @@ service cloud.firestore {
           )
         );
       allow update: if isValidId(gradeId) &&
-        isActiveMember() &&
-        isValidSessionGrade(incoming()) &&
+        isEmailVerified() &&
+        isValidServerTimestampOnUpdate(incoming(), existing()) &&
         incoming().id == existing().id &&
         incoming().sessionId == existing().sessionId &&
         incoming().studentId == existing().studentId &&
         incoming().updatedByUid == request.auth.uid &&
-        isValidServerTimestampOnUpdate(incoming(), existing()) && (
+        isValidSessionGrade(incoming()) && (
           isAdmin() || (
-            isServantForClass(sessionDoc(existing().sessionId).classId) &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['sessionTitle', 'date', 'classId', 'termId', 'exam', 'homework', 'attendance', 'participation', 'prayer', 'tools', 'notes', 'qrAttendedAt', 'updatedByUid', 'serverUpdatedAt'])
-          ) || (
-            existing().studentId == request.auth.uid &&
-            existing().attendance == 0 &&
-            incoming().attendance == 1 &&
-            incoming().exam == existing().exam &&
-            incoming().homework == existing().homework &&
-            incoming().participation == existing().participation &&
-            incoming().prayer == existing().prayer &&
-            incoming().tools == existing().tools &&
-            'submittedQrCode' in incoming() &&
-            isValidStudentQrCheckin(existing().sessionId, incoming().submittedQrCode, sessionDoc(existing().sessionId).classId) &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['attendance', 'submittedQrCode', 'qrAttendedAt', 'updatedByUid', 'serverUpdatedAt'])
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            canActiveNonAdminUpdateGrade(userDoc(), incoming(), existing())
           )
         );
       allow delete: if isValidId(gradeId) && isAdmin();

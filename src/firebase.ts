@@ -3,6 +3,9 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut,
   onAuthStateChanged,
   User,
@@ -36,6 +39,7 @@ export enum OperationType {
 }
 
 export interface FirestoreErrorInfo {
+  code?: string;
   error: string;
   operationType: OperationType;
   path: string | null;
@@ -53,8 +57,10 @@ export interface FirestoreErrorInfo {
 }
 
 export function isQuotaExceededError(error: unknown): boolean {
+  const code = typeof (error as any)?.code === 'string' ? (error as any).code : '';
   const msg = error instanceof Error ? error.message : String(error || '');
   return (
+    code === 'resource-exhausted' ||
     msg.includes('Quota exceeded') ||
     msg.includes('resource-exhausted') ||
     msg.includes('Free daily read units')
@@ -70,7 +76,9 @@ export function handleFirestoreError(
   operationType: OperationType,
   path: string | null
 ): never {
+  const errCode = typeof (error as any)?.code === 'string' ? (error as any).code : undefined;
   const errInfo: FirestoreErrorInfo = {
+    ...(errCode ? { code: errCode } : {}),
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
@@ -108,5 +116,36 @@ export async function testConnection(): Promise<{ online: boolean; error?: strin
 
 void testConnection();
 
-export { signInWithPopup, signOut, onAuthStateChanged };
+export async function createAuthAccountWithoutSigningOut(
+  email: string,
+  password: string,
+  displayName?: string
+): Promise<string> {
+  const creatorAppName = 'admin_student_creator';
+  const existingCreatorApp = getApps().find((a) => a.name === creatorAppName);
+  const creatorApp = existingCreatorApp || initializeApp(firebaseConfig, creatorAppName);
+  const creatorAuth = getAuth(creatorApp);
+  try {
+    const cred = await createUserWithEmailAndPassword(creatorAuth, email.trim(), password);
+    if (displayName?.trim()) {
+      try {
+        await updateProfile(cred.user, { displayName: displayName.trim() });
+      } catch {
+        /* non-fatal */
+      }
+    }
+    return cred.user.uid;
+  } finally {
+    await signOut(creatorAuth).catch(() => undefined);
+  }
+}
+
+export {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  signOut,
+  onAuthStateChanged,
+};
 export type { User };

@@ -28,7 +28,6 @@ import {
   X,
   FileText,
   AlertTriangle,
-  RotateCcw,
   QrCode,
   LogOut,
   GraduationCap,
@@ -37,10 +36,8 @@ import {
   PartyPopper,
   Megaphone,
   BookMarked,
-  Database,
-  UploadCloud,
-  Save,
   MapPin,
+  UploadCloud,
 } from 'lucide-react';
 import { CertificateModal } from './CertificateModal';
 import { QrAttendanceModal } from './QrAttendanceModal';
@@ -73,9 +70,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     addChurchEvent,
     updateChurchEvent,
     deleteChurchEvent,
-    exportBackupJson,
-    restoreBackupJson,
-    forceSyncDatabase,
     approveUser,
     approveUserWithDetails,
     rejectUser,
@@ -101,15 +95,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     getClassLeaderboard,
     getStudentSessionGrades,
     logout,
-    firebaseUser,
-    firebaseSyncing,
-    firebaseError,
-    loginWithGoogle,
-    syncNowToFirebase,
-    runSafeMigration,
   } = useApp();
 
-  const [firebaseSyncMsg, setFirebaseSyncMsg] = useState<string | null>(null);
   const [pendingRoleDrafts, setPendingRoleDrafts] = useState<Record<string, UserProfile['role']>>({});
   const [pendingClassDrafts, setPendingClassDrafts] = useState<Record<string, ClassId>>({});
   const [pendingMergeDrafts, setPendingMergeDrafts] = useState<Record<string, string>>({});
@@ -147,10 +134,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [eventTargetClass, setEventTargetClass] = useState<ClassId | 'all_classes'>('all_classes');
   const [eventStatus, setEventStatus] = useState<'upcoming' | 'ongoing' | 'completed'>('upcoming');
   const [eventToDelete, setEventToDelete] = useState<ChurchEvent | null>(null);
-
-  // Backup & Storage Persistence State
-  const [backupRestoreLoading, setBackupRestoreLoading] = useState(false);
-  const [backupStatusMessage, setBackupStatusMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
@@ -274,27 +257,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!eventToDelete) return;
     await deleteChurchEvent(eventToDelete.id);
     setEventToDelete(null);
-  };
-
-  const handleRestoreFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBackupRestoreLoading(true);
-    setBackupStatusMessage(null);
-    const res = await restoreBackupJson(file);
-    setBackupRestoreLoading(false);
-    setBackupStatusMessage(res.message);
-    setTimeout(() => setBackupStatusMessage(null), 7000);
-    // Clear input
-    e.target.value = '';
-  };
-
-  const handleForceSync = async () => {
-    setBackupRestoreLoading(true);
-    await forceSyncDatabase();
-    setBackupRestoreLoading(false);
-    setBackupStatusMessage('تم مزامنة وحفظ قاعدة البيانات بنجاح على السيرفر والقرص الدائم ✅');
-    setTimeout(() => setBackupStatusMessage(null), 5000);
   };
 
   // Grading Modal State
@@ -526,111 +488,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <div className="text-amber-100/70 text-[11px]">فصول معتمدة</div>
           </div>
-
-          <button
-            type="button"
-            disabled={firebaseSyncing}
-            onClick={() => {
-              void (async () => {
-                setFirebaseSyncMsg(null);
-                const res = firebaseUser ? await syncNowToFirebase() : await loginWithGoogle();
-                setFirebaseSyncMsg(res.message);
-                setTimeout(() => setFirebaseSyncMsg(null), 6000);
-              })();
-            }}
-            className={`p-3 px-4 rounded-2xl border text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
-              firebaseUser
-                ? 'bg-emerald-950/70 hover:bg-emerald-900 text-emerald-200 border-emerald-600/60'
-                : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400/60'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>
-              {firebaseSyncing
-                ? 'جاري الحفظ...'
-                : firebaseUser
-                  ? 'مزامنة Firebase'
-                  : 'ربط Firebase بجوجل'}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {(firebaseSyncMsg || firebaseError || backupStatusMessage) && (
-        <div
-          className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 ${
-            firebaseError && !firebaseSyncMsg && !backupStatusMessage
-              ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
-              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
-          }`}
-        >
-          <span>{firebaseSyncMsg || backupStatusMessage || firebaseError}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setFirebaseSyncMsg(null);
-              setBackupStatusMessage(null);
-            }}
-            className="text-current opacity-70 hover:opacity-100 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Safe Cloud Migration & JSON Backup Bar */}
-      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 font-bold">
-          <Database className="w-4 h-4 text-amber-600" />
-          <span>أدوات أمان البيانات والنسخ الاحتياطي الآمن (بدون حذف أي بيانات)</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={firebaseSyncing || backupRestoreLoading}
-            onClick={() => {
-              void (async () => {
-                setFirebaseSyncMsg(null);
-                const report = await runSafeMigration();
-                if (!report) {
-                  setFirebaseSyncMsg('تعذر تشغيل الترحيل الآمن: يرجى تسجيل الدخول بحساب جوجل للأدمن أولاً.');
-                } else if (report.alreadyClean) {
-                  setFirebaseSyncMsg('بيانات Firebase محدثة ومنظمة بالكامل بالفعل ✅ (لم يلزم تعديل أي سجلات).');
-                } else {
-                  setFirebaseSyncMsg(
-                    `تم الترحيل الآمن بنجاح ✅ (أكواد QR: ${report.migratedQrSecrets} • درجات: ${report.backfilledGradeClassIds} • امتحانات: ${report.backfilledFinalExamClassIds})`
-                  );
-                }
-                setTimeout(() => setFirebaseSyncMsg(null), 7000);
-              })();
-            }}
-            className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>ترحيل وتحديث هيكل البيانات بأمان</span>
-          </button>
-          <button
-            type="button"
-            onClick={exportBackupJson}
-            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-600" />
-            <span>تنزيل نسخة احتياطية JSON</span>
-          </button>
-          <label className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5 cursor-pointer">
-            <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
-            <span>دمج نسخة JSON</span>
-            <input type="file" accept=".json,application/json" className="hidden" onChange={handleRestoreFileSelected} />
-          </label>
-          <button
-            type="button"
-            disabled={backupRestoreLoading}
-            onClick={handleForceSync}
-            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>حفظ ومزامنة الخادم</span>
-          </button>
         </div>
       </div>
 
